@@ -1,22 +1,34 @@
-# Arcade — ten classic games, a few blocks each
+# Arcade — ten classic games, every rule in blocks
 
-A bare-bones arcade cabinet built on the same block framework as Bug Squad / Dino Run (MESACS 0.2a).
-Pick a game on the menu page (`index.html`; each card shows the game's own sprites), press **▶ RUN** (or Enter), and open **▦ BLOCKS** (or click any
-character) to read the code that makes it work. Every rule is in blocks; change a number and run again.
-**↺** puts a game's code back. EN / ES.
+A bare-bones arcade cabinet built on the MESACS 0.2a block framework (same editor as Bug Squad /
+Dino Run). The menu (`index.html`) shows a card per game, drawn from the game's own sprites. A card
+opens `play.html?g=<id>`: the machine's title screen, **Enter** (or a click) to start, and
+**GAME OVER** when the lives run out. **▦ BLOCKS** (or clicking any character) shows the code that
+makes it work — every rule is in blocks. **↺** puts a game's code back. EN / ES.
 
-| # | Game | Stripped down to |
+Each game uses the original machine's screen shape and pixel sprites (1 art pixel = 1 arcade pixel,
+8 pixels = 1 square), so it looks like the real thing.
+
+| # | Game | What the blocks do |
 |---|---|---|
-| 1 | 🏓 Pong | two paddles (W/S, ↑/↓), a ball that bounces, a point when it gets past |
-| 2 | 🐍 Snake | moves on a grid, arrows turn, apple makes the tail longer (tail = clones that wait, then vanish); the wall resets |
-| 3 | 🧱 Breakout | bat, ball, one row of 7 bricks |
-| 4 | 👾 Space Invaders | cannon, one row of 6 invaders marching side to side, laser |
-| 5 | 🟨 Tetris | only the O-piece: falls, ← →, stacks (a landed piece is a clone left behind); no rotation, no line clears |
-| 6 | 🐸 Frogger | hop across a road with one car and one truck |
-| 7 | 🟡 Pac-Man | Pac-Man, one dot, Blinky gliding after you; no maze walls inside |
-| 8 | 🪨 Asteroids | ship flies with arrows (no rotation), one rock drifting and wrapping, shots |
-| 9 | 🐝 Galaga | fighter, three bees that swoop down at you |
-| 10 | 🐛 Centipede | 8 segments, each turning and dropping at walls and mushrooms; shoot segments and mushrooms |
+| 1 | 🏓 Pong | you (↑ ↓) vs. a computer paddle; the hit spot sets the angle; each hit is faster; first to 11 |
+| 2 | 🐍 Snake | grid steps; can't reverse; apple = +1 length (body = clones that live `length` steps); wall or self = game over |
+| 3 | 🧱 Breakout | 8 rows of 14 bricks (7/5/3/1 points); paddle angle; walls and roof; 3 balls |
+| 4 | 👾 Space Invaders | 55 invaders march on a beat that speeds up as they die, drop at the edges, bomb you; 4 bunkers that erode; one shot at a time; mystery ship |
+| 5 | 🟦 Tetris | NES rules: 7 pieces, rotation, hold-to-slide, soft drop, line clears, 40/100/300/1200 × level, speed by level, top-out |
+| 6 | 🐸 Frogger | 5 lanes of traffic, 5 river lanes of logs and turtles you ride (water kills), 5 bays (a filled bay kills), edges kill |
+| 7 | 🟡 Pac-Man | the real maze, 240 dots + 4 energizers, Pac-Man keeps moving and buffers turns, 4 ghosts (Blinky chases hardest), blue ghosts, tunnel |
+| 8 | 🪨 Asteroids | rotate, thrust and drift (no brakes), wrap-around, rocks split big → medium → small, waves grow |
+| 9 | 🐝 Galaga | 40-ship formation that sways; dives that fire at you; boss Galagas take two hits; stages |
+| 10 | 🐛 Centipede | 12-segment centipede turns at mushrooms and walls; a shot segment becomes a mushroom (so it splits); mushrooms take 4 hits; spider |
+
+How it is built:
+
+- `costumes.js` — every sprite (with animation frames, facing, palettes) and the Pac-Man maze.
+- `games.js` — each game's screen size, scenery, cast, block code, score display and title screen.
+- `vm.js` — the block language. Two changes for the arcade: `point in direction` is Scratch's
+  compass (0 up, 90 right), and a *hidden* object's `repeat` runs in one go (so a hidden template
+  lays out 112 bricks or 240 dots instantly).
 
 ## Play it online
 

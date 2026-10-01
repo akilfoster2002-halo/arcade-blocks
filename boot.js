@@ -91,7 +91,7 @@
     const T=s=>(window.t ? t(s) : s);
     const el=document.createElement('div');
     el.className='dn-sorry';
-    el.innerHTML='<b>'+T('Bug Squad could not start')+'</b><small>'+
+    el.innerHTML='<b>'+T('The arcade could not start')+'</b><small>'+
       String(why).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+
       '</small><small>'+T('Try a different browser, or ask a teacher.')+'</small>';
     document.body.appendChild(el);

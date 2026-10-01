@@ -4,97 +4,75 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- ARCADE — the menu. Each card's little screen is drawn from the same
-     pixel art (costumes.js) the game itself uses, so what you click is
-     what you get. A card opens play.html?g=<id>. -->
+     sprites (costumes.js) and scenery (games.js) the game itself uses, in
+     the machine's real pixels, so what you click is what you get. A card
+     opens play.html?g=<id>. -->
 <title>Arcade</title>
-<meta name="description" content="Ten classic arcade games, each a few blocks long. Pick one.">
+<meta name="description" content="Ten classic arcade games, every rule in blocks you can read. Pick one.">
 <style>
 @font-face{font-family:'Space Mono';src:url('fonts/spacemono-700.woff2') format('woff2');font-weight:700;font-display:swap}
 :root{--paper:#0b0a1c;--ink:#f2f2ff;--dim:#8d8bb8;--card:#1a1838;--line:#4b4885;--gold:#ffe14d}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--paper);color:var(--ink);font-family:'Space Mono',ui-monospace,Menlo,monospace}
-header{display:flex;align-items:center;justify-content:center;gap:14px;padding:28px 16px 8px;position:relative}
-h1{margin:0;font-size:clamp(28px,6vw,46px);letter-spacing:8px;color:var(--gold);text-shadow:0 0 18px rgba(255,225,77,.35)}
+header{display:flex;align-items:center;justify-content:center;padding:26px 16px 6px;position:relative}
+#logo{image-rendering:pixelated;width:min(360px,70vw);height:auto}
 .lang{position:absolute;right:16px;top:20px;background:var(--card);color:var(--ink);border:2px solid var(--line);
   border-radius:10px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
-.sub{text-align:center;color:var(--dim);margin:0 0 22px;font-size:14px;letter-spacing:1px}
-main{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:18px;max-width:1180px;margin:0 auto;padding:0 16px 40px}
+.sub{text-align:center;color:var(--dim);margin:6px 0 22px;font-size:14px;letter-spacing:1px}
+main{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:18px;max-width:1180px;margin:0 auto;padding:0 16px 40px}
 a.card{display:grid;gap:8px;text-decoration:none;color:var(--ink);background:var(--card);border:2px solid var(--line);
   border-radius:16px;padding:10px 10px 12px;transition:transform .12s,border-color .12s}
 a.card:hover,a.card:focus-visible{transform:translateY(-3px);border-color:var(--gold);outline:none}
-canvas{width:100%;aspect-ratio:34/20;border-radius:10px;image-rendering:pixelated;display:block;background:#15142b}
-.name{display:flex;align-items:center;gap:8px;font-size:16px;letter-spacing:1px;padding:0 4px}
+a.card canvas{width:100%;height:210px;object-fit:contain;border-radius:10px;image-rendering:pixelated;display:block;background:#000}
+.name{display:flex;align-items:center;gap:8px;font-size:15px;letter-spacing:1px;padding:0 4px}
 .name b{color:var(--dim);font-size:12px;min-width:20px}
 .name .go{margin-left:auto;color:#5dff7a}
 </style>
 </head>
 <body>
-<header><h1>ARCADE</h1><button class="lang" id="lang">ES</button></header>
+<header><canvas id="logo"></canvas><button class="lang" id="lang">ES</button></header>
 <p class="sub" id="sub">Pick a game.</p>
 <main id="grid"></main>
 
-<script src="costumes.js?v=6"></script>
+<script src="strings.js?v=8"></script>
+<script src="costumes.js?v=8"></script>
+<script src="games.js?v=8"></script>
 <script>
-const C = COSTUMES.C;
-/* each card: the game's characters where they stand at the start, plus its scenery */
-const GAMES = [
-  { id:'pong', name:'Pong', bg:'court', cast:[['pong/paddle',-15,-1],['pong/paddle',15,-1],['pong/ball',2,1]] },
-  { id:'snake', name:'Snake', cast:[['snake/body',-3,0],['snake/body',-2,0],['snake/body',-1,0],['snake/body',0,0],['snake/apple',6,0]] },
-  { id:'breakout', name:'Breakout', bricks:true, cast:[['court/bat',0,-8],['court/ball',2,-4]] },
-  { id:'invaders', name:'Space Invaders', cast:[['space/ship',0,-8],['space/laser',0,-3],
-      ...[-12,-9,-6,-3,0,3].map(x=>['space/alien',x,5])] },
-  { id:'tetris', name:'Tetris', bg:'well', cast:[['tetris/o',0,4],['tetris/o',-2,-10],['tetris/o',0,-10],['tetris/o',0,-8],['tetris/o',4,-10]] },
-  { id:'frogger', name:'Frogger', bg:'road', cast:[['road/frog',0,-9],['road/car',-8,-5.4],['road/truck',6,-0.6]] },
-  { id:'pacman', name:'Pac-Man', bg:'maze', cast:[['maze/chomp',0,-1],['maze/blinky',8,-1],['maze/dot',-6,0]] },
-  { id:'asteroids', name:'Asteroids', cast:[['rocks/ship',0,-1],['rocks/rock',-11,4],['rocks/rock',9,-6],['rocks/shot',0,3]] },
-  { id:'galaga', name:'Galaga', bg:'stars', cast:[['galaga/fighter',0,-8],['galaga/bee',-8,5],['galaga/bee',0,6],['galaga/bee',6,0],['galaga/shot',0,-4]] },
-  { id:'centipede', name:'Centipede', cast:[['centi/wand',0,-9],
-      ...[-1,-2.3,-3.6,-4.9,-6.2,-7.5].map(x=>['centi/body',x,6]), ['centi/head',0.3,6],
-      ['centi/shroom',-10,2],['centi/shroom',7,0],['centi/shroom',3,-4],['centi/shroom',-5,-2],['centi/shroom',11,5]] }
-];
-const ES = { 'Pick a game.':'Escoge un juego.' };
+const C = COSTUMES.C, GAMES = ARCADE.GAMES;
 let lang = 'en'; try{ lang = localStorage.getItem('arcade.lang')==='es' ? 'es' : 'en'; }catch(e){}
 
-const U = 12;                                   // canvas pixels per square
-function rect(c,x0,y0,x1,y1,col){ c.fillStyle=col; c.fillRect((x0+17)*U, (10-y1)*U, (x1-x0)*U, (y1-y0)*U); }
-function sprite(c,cid,x,y){
-  const k=C[cid], art=k.art, px=COSTUMES.PX*U, w=Math.max(...art.map(r=>r.length));
-  const left=(x+17)*U - w*px/2, top=(10-y)*U - art.length*px;
-  art.forEach((row,j)=>{ for(let i=0;i<row.length;i++){
-    const ch=row[i]; if(ch!=='#' && ch!=='o') continue;
-    c.fillStyle = ch==='#' ? k.ink : '#ffffff';
-    c.fillRect(Math.round(left+i*px), Math.round(top+j*px), Math.ceil(px), Math.ceil(px));
-  }});
-}
-function scene(g){
-  const cv=document.createElement('canvas'); cv.width=34*U; cv.height=20*U;
+/* one card: the game's screen at the start, drawn in its own pixels */
+function screen(g){
+  const w=g.view.w, h=g.view.h, x0=-w/2, y1=h/2;
+  const cv=document.createElement('canvas'); cv.width=w*8; cv.height=h*8;
   const c=cv.getContext('2d');
-  rect(c,-17,-10,17,10,COSTUMES.SCREEN);
-  if(g.bg==='court') for(let y=-9.5;y<10;y+=1.4) rect(c,-0.1,y,0.1,y+0.7,'#3b3a6b');
-  if(g.bg==='road'){ rect(c,-17,-10,17,-7.6,'#274d2b'); rect(c,-17,-6.3,17,-3.3,'#34344a'); rect(c,-17,-1.5,17,1.5,'#34344a');
-    for(let x=-16;x<17;x+=3){ rect(c,x,-4.85,x+1.4,-4.75,'#e6d35a'); rect(c,x,-0.05,x+1.4,0.05,'#e6d35a'); }
-    rect(c,-17,6.5,17,10,'#274d2b'); rect(c,-17,6.4,17,6.6,'#5dff7a'); }
-  if(g.bg==='maze') [[-15,-8.5,15,-8.2],[-15,7.9,15,8.2],[-15,-8.5,-14.7,8.2],[14.7,-8.5,15,8.2]].forEach(q=>rect(c,...q,'#2b3bff'));
-  if(g.bg==='well') [[-7.4,-7.1],[7.1,7.4]].forEach(q=>rect(c,q[0],-10,q[1],10,'#5d5bb0'));
-  if(g.bg==='stars'){ let s=3; const r=()=>{ s=(s*16807)%2147483647; return s/2147483647; };
-    for(let i=0;i<70;i++){ const x=-17+r()*34, y=-10+r()*20, z=0.06+r()*0.08; rect(c,x,y,x+z,y+z, r()<0.3?'#8fd3ff':'#d8d8ff'); } }
-  if(g.bricks) for(let i=0;i<7;i++) sprite(c,'court/brick',-12+i*4,6);
-  g.cast.forEach(([cid,x,y])=>sprite(c,cid,x,y));
+  c.fillStyle='#000'; c.fillRect(0,0,cv.width,cv.height);
+  if(g.stars){ let s=9; const r=()=>{ s=(s*16807)%2147483647; return s/2147483647; };
+    const cols=['#ff4040','#40ff40','#4080ff','#ffff40','#ffffff','#ff40ff'];
+    for(let i=0;i<70;i++){ c.fillStyle=cols[i%6]; c.fillRect(Math.floor(r()*cv.width), Math.floor(r()*cv.height), 1, 1); } }
+  if(g.scene) g.scene({ rect:(a,b,cc,d,col)=>{ c.fillStyle=col; c.fillRect(Math.round((a-x0)*8), Math.round((y1-d)*8), Math.round((cc-a)*8), Math.round((d-b)*8)); } });
+  const sprite=(cid,x,y)=>{ const k=C[cid]; if(!k) return;
+    COSTUMES.paint(c, cid, Math.round((x-x0)*8 - k.w/2), Math.round((y1-y)*8 - (k.h-(k.below||0)))); };
+  g.cast.filter(a=>a.visible!==false).forEach(a=>sprite(a.shape, a.x, a.y));
+  (g.thumb ? g.thumb() : []).forEach(([cid,x,y])=>sprite(cid,x,y));
   return cv;
-}
-function render(){
-  document.documentElement.lang=lang;
-  document.getElementById('lang').textContent = lang==='es' ? 'EN' : 'ES';
-  document.getElementById('sub').textContent = lang==='es' ? ES['Pick a game.'] : 'Pick a game.';
 }
 const grid=document.getElementById('grid');
 GAMES.forEach((g,i)=>{
   const a=document.createElement('a'); a.className='card'; a.href='play.html?g='+g.id;
-  a.appendChild(scene(g));
+  a.appendChild(screen(g));
   const n=document.createElement('div'); n.className='name';
   n.innerHTML=`<b>${i+1}</b>${g.name}<span class="go">▶</span>`;
   a.appendChild(n); grid.appendChild(a);
 });
+function render(){
+  window.LANG=lang; document.documentElement.lang=lang;
+  document.getElementById('lang').textContent = lang==='es' ? 'EN' : 'ES';
+  document.getElementById('sub').textContent = lang==='es' ? 'Escoge un juego.' : 'Pick a game.';
+  const lg=document.getElementById('logo'), c=lg.getContext('2d');
+  lg.width=6*16*2; lg.height=16; c.clearRect(0,0,lg.width,lg.height);
+  ARCADE.drawText(c, 'ARCADE', lg.width/2, 1, '#ffe14d', { s:2, align:'center' });
+}
 document.getElementById('lang').onclick=()=>{ lang = lang==='es' ? 'en' : 'es';
   try{ localStorage.setItem('arcade.lang',lang); }catch(e){} render(); };
 render();

@@ -14,7 +14,7 @@
      ===================================================================== -->
 <title>Arcade</title>
 <meta name="description" content="Ten classic arcade games, cut down to a few blocks each. Play them and read their code.">
-<link rel="stylesheet" href="app.css?v=5">
+<link rel="stylesheet" href="app.css?v=8">
 <style>
 @font-face{font-family:'Space Mono';src:url('fonts/spacemono-700.woff2') format('woff2');
   font-weight:700;font-style:normal;font-display:swap}
@@ -27,151 +27,42 @@
 @font-face{font-family:'JetBrains Mono';src:url('fonts/jetbrainsmono-var.woff2') format('woff2');
   font-weight:400 700;font-style:normal;font-display:swap}
 
-/* the desert is the page: the two greys of the original */
 :root{--dn-ink:#f2f2ff;--dn-paper:#0b0a1c;--dn-dim:#8d8bb8}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--dn-paper)}
-#view{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;
-  image-rendering:pixelated}
+#view{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #coder{position:fixed;inset:0;z-index:60;pointer-events:none}
 
-/* ------------------------------------------------------------- the HUD */
+/* the machine's own screen: score, lives, title and GAME OVER, in real pixels */
+#hud{position:fixed;z-index:55;image-rendering:pixelated;image-rendering:crisp-edges;pointer-events:none}
+#hud.live{pointer-events:auto;cursor:pointer}
+
+/* ------------------------------------------------------------- the bar */
 #dino{position:fixed;inset:0;z-index:56;pointer-events:none;font-family:var(--font)}
-#dnTop{display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto}
+#bsTop{position:absolute;left:14px;right:14px;top:14px;pointer-events:none}
+#dnTop{display:flex;gap:8px;align-items:center;flex-wrap:wrap;pointer-events:auto}
+#dino.coding #bsTop{display:none}
 .dn-btn{background:#1d1b3d;color:var(--dn-ink);border:2px solid #4b4885;
   border-radius:10px;padding:8px 13px;font-family:var(--font-disp);font-size:13px;
-  letter-spacing:1.2px;cursor:pointer;line-height:1.1}
+  letter-spacing:1.2px;cursor:pointer;line-height:1.1;text-decoration:none}
 .dn-btn:hover{background:#2a2757}
 .dn-btn:focus-visible{outline:3px solid #7ab8ff;outline-offset:2px}
-.dn-btn small{color:var(--dn-dim);margin-left:6px;letter-spacing:1px}
+.dn-btn.ic{min-width:40px;padding:8px 10px;text-align:center}
 #dnRun{color:#5dff7a;border-color:#5dff7a}
 #dnRun.live{color:#ff6b6b;border-color:#ff6b6b}
-/* while the editor is open only the download button stays, so the code can
-   be handed in from wherever the student is — at the bottom, just right of
-   the block list (10 + 252 wide, 210 on a narrower screen) */
-#dino.coding #bsTop{display:none}
-/* a narrow window leaves a narrow gap between the two panels: a smaller button fits it */
+#gameName{color:#ffe14d;font-family:'Space Mono',var(--font-disp),monospace;font-size:16px;letter-spacing:2px;margin-left:6px}
+.bs-gap{flex:1}
 
-#dnScore{position:absolute;right:16px;top:16px;font-family:'Space Mono',var(--font-disp),monospace;
-  font-weight:700;font-size:20px;letter-spacing:2px;color:#ffe14d;white-space:pre}
-#dnScore .dn-hi{color:var(--dn-dim);margin-right:14px}
-#dnScore .off{visibility:hidden}
-
-#dnMsg{position:absolute;transform:translateX(-50%);display:grid;gap:12px;justify-items:center;
-  text-align:center;color:var(--dn-ink);font-family:'Space Mono',var(--font-disp),monospace;
-  pointer-events:none;width:max-content}
-#dnMsg .dn-over{font-size:26px;letter-spacing:10px;margin-right:-10px;white-space:nowrap}
-#dnMsg small{font-family:var(--font);font-size:14px;color:var(--dn-ink);line-height:1.35;white-space:nowrap;
-  background:rgba(11,10,28,.7);padding:3px 10px;border-radius:8px}
-#dnMsg .dn-start{font-size:17px}
-.dn-again{background:none;border:0;color:var(--dn-ink);cursor:pointer;padding:4px;border-radius:8px}
-.dn-again:hover{background:rgba(0,0,0,.06)}
-.dn-again:focus-visible{outline:3px solid #7ab8ff}
-
-/* a teacher at ?answer is looking at the answer key, and is told so */
-#dnTeacher{position:absolute;right:14px;top:62px;padding:6px 12px;background:#1d1b3d;color:#ffc14d;
-  border:2px solid #ffc14d;border-radius:10px;font-family:var(--font-disp);font-size:12px;letter-spacing:1px}
-#dino.coding #dnTeacher,#dino.coding #dnMsg{display:none}
-
-/* IF … ELSE, drawn so it cannot be mistaken for a plain if: on the shelf
-   the else sits on its own line under the if, and in a script the else is
-   a band in the block's own colour rather than a whisper of grey text */
+/* IF … ELSE, drawn so it cannot be mistaken for a plain if */
 #cPal .cblk.k-c2 .cpelse{flex-basis:100%;margin-top:2px;padding:2px 0 0 12px;
   border-top:2px dashed rgba(36,29,56,.35)}
 #coder .celse{display:inline-block;background:var(--a);color:#241d38;font-weight:bold;
   font-size:12px;border-radius:6px;padding:2px 10px;margin:2px 0}
 
-/* the brief — how to play, and what to try changing */
-#dnBrief{position:fixed;inset:0;z-index:80;display:grid;place-items:center;
-  background:rgba(11,10,28,.78);padding:16px}
-#dnBrief .card{position:relative;max-width:640px;width:100%;max-height:92vh;overflow:auto;padding:26px 30px;
-  background:var(--ink);border:1px solid var(--line);border-radius:18px;color:var(--text);text-align:left;
-  box-shadow:0 18px 50px rgba(0,0,0,.25)}
-#dnBrief h1{font-family:'Space Mono',var(--font-disp);letter-spacing:4px;font-size:28px;margin:0 0 4px}
-#dnBrief .kick{color:var(--star);font-size:12px;letter-spacing:2px;margin:14px 0 6px}
-#dnBrief h1 + .kick{margin-top:0}
-#dnBrief p{color:var(--muted);line-height:1.5;margin:8px 0}
-#dnBrief p b{color:var(--text)}
-#dnBrief ol{margin:6px 0 10px;padding-left:22px;line-height:1.5;color:var(--muted)}
-#dnBrief li{margin:5px 0}
-#dnBrief li b{color:var(--text)}
-#dnBrief code{font-family:var(--font-code);font-size:12.5px;background:var(--panel2);
-  padding:1px 6px;border-radius:6px;color:var(--star);white-space:nowrap}
-#dnBrief .dn-keys{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
-#dnBrief .dn-keys div{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
-  padding:7px 11px;color:var(--muted)}
-#dnBrief .dn-keys span{color:var(--text);margin-left:4px}
-#dnBrief kbd{font-family:var(--font-disp);font-size:12px;background:#fff;color:#241d38;
-  border-radius:5px;padding:1px 7px;border-bottom:2px solid #9a91b8}
-#dnBrief .dn-note{font-size:13px}
-#dnBrief .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-#dnBrief .dn-lang{position:absolute;right:18px;top:18px}
-#dnBrief .dn-lang .dn-btn{background:var(--panel2);color:var(--text);border-color:var(--line);font-size:12px}
-
 .dn-sorry{position:fixed;inset:0;display:grid;place-content:center;gap:10px;text-align:center;
   font-family:var(--font,system-ui);color:var(--dn-ink);background:var(--dn-paper);padding:24px;z-index:99}
 .dn-sorry b{font-family:var(--font-disp,inherit);font-size:20px;letter-spacing:2px}
 .dn-sorry small{font-size:13px;max-width:34ch}
-
-@media (max-width:700px){
-  #dnBrief .dn-lang{position:static;margin:-6px 0 10px;text-align:right}
-  #dnScore{font-size:16px}
-  .dn-btn{padding:7px 10px;font-size:12px}
-}
-
-/* ------------------------------------------------------ Bug Squad */
-#bsTop{position:absolute;left:14px;right:14px;top:14px;pointer-events:none}
-#dnTop{display:flex;gap:8px;align-items:center;flex-wrap:wrap;pointer-events:auto}
-.dn-btn.ic{min-width:40px;padding:8px 10px}
-.bs-gap{flex:1}
-#bsLevels{display:none}
-.bs-lvl{position:relative;background:#15142b;border:2px solid #34326a;border-radius:10px;
-  width:42px;height:38px;font-size:20px;cursor:pointer;opacity:.55}
-.bs-lvl:hover{opacity:1}
-.bs-lvl.on{opacity:1;border-color:#ffe14d;background:#2a2757}
-.bs-lvl.star::after{content:'⭐';position:absolute;right:-7px;top:-9px;font-size:13px}
-
-#bsBugs{position:fixed;bottom:10px;z-index:61;display:grid;gap:8px;align-content:start;
-  background:#1a1838;border:2px solid #4b4885;border-radius:14px;padding:12px;
-  color:var(--dn-ink);font-family:var(--font);font-size:15px;max-height:40vh;overflow:auto}
-#bsBugs.side{left:14px;bottom:auto;width:250px;max-height:none}
-.bs-head{font-family:var(--font-disp);letter-spacing:1.5px;font-size:13px;color:var(--dn-dim)}
-.bs-item{display:flex;gap:8px;align-items:flex-start;background:#23204a;border-radius:10px;padding:9px 10px}
-.bs-item.ok{background:#173a26;color:#a8f0bd}
-.bs-item.ok .bs-what{text-decoration:line-through;text-decoration-color:rgba(168,240,189,.5)}
-.bs-ico{font-size:18px;line-height:1.1}
-.bs-what{flex:1;line-height:1.3}
-.bs-what small{display:block;margin-top:6px;color:#ffe9a8;font-size:13.5px}
-.bs-what code{font-family:var(--font-code);font-size:12.5px;background:#2a2757;
-  padding:0 4px;border-radius:5px;color:#ffe14d;white-space:nowrap}
-.bs-hbtn{background:#2f2b63;border:1px solid #4b4885;border-radius:8px;cursor:pointer;font-size:15px;padding:2px 7px}
-.dn-btn.ic.on{border-color:#ffc14d;background:#3a2f12}
-.bs-teach{display:flex;gap:8px;justify-content:center;border-top:1px dashed #4b4885;padding-top:8px}
-.bs-teach .dn-btn{font-size:12px;padding:6px 10px;border-color:#ffc14d;color:#ffc14d}
-.bs-badge{justify-self:center;border-color:#ffe14d;color:#ffe14d;font-size:14px}
-.bs-name{width:100%;max-width:320px;text-align:center;font-family:var(--font-disp);font-size:20px;
-  padding:10px;border-radius:10px;border:2px solid var(--line);background:#fff;color:#241d38}
-.bs-name.need{border-color:#ff6b6b;box-shadow:0 0 0 3px rgba(255,107,107,.35)}
-.bs-prev{width:100%;max-width:380px;border-radius:10px;margin-top:6px}
-.bs-done{display:flex;gap:10px;align-items:center;justify-content:center;font-size:28px}
-.bs-next{color:#5dff7a;border-color:#5dff7a;font-size:16px;padding:8px 16px}
-.bs-line code{font-family:var(--font-code);font-size:13px;background:#2a2757;
-  padding:0 5px;border-radius:5px;color:#ffe14d;white-space:nowrap}
-@media (max-width:760px){ #bsBugs.side{width:170px;font-size:13px} }
-#dnBrief .card{text-align:center;max-width:440px;display:grid;justify-items:center;gap:6px;padding:30px}
-#dnBrief h1{margin:0}
-.bs-big{font-size:64px;line-height:1.1}
-.bs-tag{margin:0;color:var(--star);font-size:12px;letter-spacing:2px;text-transform:uppercase}
-.bs-line{margin:6px 0;font-size:18px;color:var(--text)}
-.bs-k{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;color:var(--muted);font-size:14px}
-.bs-k kbd{font-family:var(--font-disp);font-size:12px;background:#fff;color:#241d38;
-  border-radius:5px;padding:2px 7px;border-bottom:2px solid #9a91b8}
-.bs-dots{display:flex;gap:7px;margin:8px 0}
-.bs-dots i{width:9px;height:9px;border-radius:50%;background:var(--line)}
-.bs-dots i.on{background:var(--star)}
-.bs-go{margin-top:10px;font-size:18px;padding:10px 26px}
-.bs-lang{position:absolute;right:14px;top:14px;background:none;border:1px solid var(--line);color:var(--muted);
-  border-radius:8px;padding:3px 8px;cursor:pointer;font-family:var(--font-disp);font-size:12px}
-@media (max-width:760px){ .bs-lvl{width:36px;height:34px;font-size:17px} .bs-gap{flex-basis:100%} }
+@media (max-width:700px){ .dn-btn{padding:7px 10px;font-size:12px} #gameName{font-size:13px} }
 </style>
 </head>
 <body>
@@ -180,25 +71,17 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--dn-paper)}
 <div id="dino">
   <div id="bsTop">
     <div id="dnTop">
-      <a class="dn-btn ic" id="bsHome" href="index.html" aria-label="All games" title="All games / Todos los juegos" style="text-decoration:none">⌂</a>
+      <a class="dn-btn ic" id="bsHome" href="index.html" aria-label="All games">⌂</a>
       <button class="dn-btn" id="dnOpen">▦ BLOCKS</button>
       <button class="dn-btn" id="dnRun">▶ RUN</button>
-      <div id="bsLevels"></div>
+      <span id="gameName"></span>
       <span class="bs-gap"></span>
-      <button class="dn-btn ic" id="dnHelp" aria-label="Help">?</button>
-      <button class="dn-btn ic" id="dnSound" aria-label="Sound">🔊</button>
       <button class="dn-btn ic" id="dnLang">ES</button>
       <button class="dn-btn ic" id="dnReset" aria-label="Start over">↺</button>
-      <button class="dn-btn ic" id="dnPdf" aria-label="Download" hidden>⤓</button>
-      <button class="dn-btn ic" id="bsKey" aria-label="Teacher" hidden>🔑</button>
     </div>
   </div>
-  <div id="dnScore"></div>
-  <div id="dnMsg" class="hidden"></div>
-  <div id="dnTeacher" class="hidden"></div>
 </div>
-
-<div id="dnBrief"><div class="card"></div></div>
+<canvas id="hud"></canvas>
 
 <div id="coder" class="hidden">
   <div id="cBar"></div>
@@ -208,15 +91,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--dn-paper)}
   <div id="cPal"></div>
   <div id="cScript"></div>
 </div>
-<div id="bsBugs" style="display:none"></div>
 
-<script src="lib/three.classic.js?v=5"></script>
-<script src="strings.js?v=5"></script>
-<script src="blocks.js?v=5"></script>
-<script src="vm.js?v=5"></script>
-<script src="coder.js?v=5"></script>
-<script src="costumes.js?v=5"></script>
-<script src="games.js?v=5"></script>
-<script src="boot.js?v=5"></script>
+<script src="lib/three.classic.js?v=8"></script>
+<script src="strings.js?v=8"></script>
+<script src="blocks.js?v=8"></script>
+<script src="vm.js?v=8"></script>
+<script src="coder.js?v=8"></script>
+<script src="costumes.js?v=8"></script>
+<script src="games.js?v=8"></script>
+<script src="boot.js?v=8"></script>
 </body>
 </html>

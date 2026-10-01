@@ -151,7 +151,7 @@ window.VM = (function(){
        nowhere else. Without that, `turn y by 15` and `change y by 1`
        would disagree about which way y points, in the same room, in front
        of somebody being taught the axes. */
-    a.mesh.rotation.set(a.tilt*Math.PI/180, a.dir*Math.PI/180, -(a.roll||0)*Math.PI/180);
+    a.mesh.rotation.set(a.tilt*Math.PI/180, -a.dir*Math.PI/180, -(a.roll||0)*Math.PI/180);
     a.mesh.visible=!!a.visible;
   }
   /* A read-only copy of somebody else's object, for this room to look at. It
@@ -427,6 +427,11 @@ window.VM = (function(){
         const n=Math.max(0,Math.round(num(g('n'))));
         for(let i=0;i<n;i++){
           const r=yield* run(bk.body,ctx); if(r) return r;
+          /* A HIDDEN OBJECT'S REPEAT DOES NOT WAIT FOR THE SCREEN. Nothing it
+             does can be seen, so — like Scratch — a hidden template lays out
+             a wall of bricks or a maze of dots in one go instead of one a
+             frame. A visible object still moves one step a frame. */
+          if(a && a.visible===false && (i+1)%2000) continue;
           yield 'tick';
         }
         break;
@@ -478,7 +483,7 @@ window.VM = (function(){
       /* --- motion -------------------------------------------------- */
       case 'motion.move': {
         if(a){ const d=num(g('n')), r=a.dir*Math.PI/180;
-               a.x += Math.sin(r)*d*0.1; a.z += Math.cos(r)*d*0.1; sync(a); }
+               a.x += Math.sin(r)*d*0.1; a.z -= Math.cos(r)*d*0.1; sync(a); }
         break;
       }
       /* WHICH ANGLE AN AXIS TURNS. The axis letters are the language's,
@@ -509,7 +514,7 @@ window.VM = (function(){
       case 'motion.setTo': { if(a){ place(a, g('a'), num(g('n'))); sync(a);} break; }
       case 'motion.point': {
         const o=target(g('o'),ctx);
-        if(a&&o){ a.dir = Math.atan2(o.x-a.x, o.z-a.z)*180/Math.PI; sync(a); }
+        if(a&&o){ a.dir = Math.atan2(o.x-a.x, a.z-o.z)*180/Math.PI; sync(a); }
         break;
       }
       case 'motion.glide': {
