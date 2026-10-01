@@ -1,0 +1,1167 @@
+/* =====================================================================
+   BUG SQUAD — six classic arcade games, and every one of them is broken.
+
+   Each game arrives with its code already written and THREE BUGS in it.
+   The student runs it, watches what goes wrong, opens the blocks and
+   fixes them. The bug list along the bottom watches the code and turns
+   each 🐞 into a ✅ the moment its fix is in.
+
+   The games go in teaching order:
+
+     1  Space Blaster   INDENTATION   a block outside the loop it belongs in
+     2  Road Hopper     + AND −       a number with the wrong sign
+     3  Chomp           x AND y       across the screen, or up it
+     4  Bomb Catch      < AND >       the alligator eats the bigger number
+     5  Brick Smash     SENSING       touching the right thing, the right key
+     6  Jump Bros       JUMPING       jump up, fall down, land on the ground
+
+   Every rule of every game is in blocks the student can open. The room
+   (this file) only draws the scenery, keeps the score on screen and
+   READS the code to tick off the bugs — it never moves anything.
+
+   A teacher can open the page with ?answer to load every game fixed.
+   ===================================================================== */
+window.BUGS = (function(){
+  const $ = s => document.querySelector(s);
+  const T = (s,p) => (window.t ? t(s,p) : s);
+
+  /* NOTHING A STUDENT DOES IS KEPT. Stars, the game you are on and the
+     name you typed live only while the page is open — every visit starts
+     fresh from game 1. Only the language and sound settings are kept. */
+  const LANG_KEY='arcade.lang', SOUND_KEY='arcade.sound';
+  const OLD_KEYS=['bug-squad.stars.v1','bug-squad.name','bug-squad.game'];
+  let myName='';
+  const teacher = typeof location!=='undefined' && /[?&]answer\b/.test(location.search);
+  /* TEACHER MODE: the 🔑 button and the code 1234. It only unlocks answer
+     buttons on this page — it keeps nothing secret, so it is a classroom
+     convenience, not a lock. It lasts until the tab is closed. */
+  const TEACH_CODE='1234', TEACH_KEY='bug-squad.teach';
+  let teach=teacher;
+  try{ if(sessionStorage.getItem(TEACH_KEY)==='on') teach=true; }catch(e){}
+
+  /* ================================================== writing code
+     Tiny builders, so a game's code below reads like the blocks do. */
+  const B=(op,args,body)=>{ const b={ op, args:args||{} }; if(body) b.body=body; return b; };
+  const flag  = (...body)=>({ hat:B('event.flag'), body });
+  const onKey = (k,...body)=>({ hat:B('event.key',{ k }), body });
+  const onClone = (...body)=>({ hat:B('event.clone'), body });
+  const forever = (...b)=>B('ctrl.forever',{},b);
+  const IF    = (c,...b)=>B('ctrl.if',{ c },b);
+  const REP   = (n,...b)=>B('ctrl.repeat',{ n },b);
+  const wait  = n=>B('ctrl.wait',{ n });
+  const key   = k=>B('sense.key',{ k });
+  const touch = o=>B('sense.touch',{ o });
+  const pos   = a=>B('motion.pos',{ a });
+  const of    = (a,o)=>B('sense.posOf',{ a, o });
+  const lt    = (a,b)=>B('op.lt',{ a, b });
+  const gt    = (a,b)=>B('op.gt',{ a, b });
+  const eq    = (a,b)=>B('op.eq',{ a, b });
+  const and   = (c,d)=>B('op.and',{ c, d });
+  const or    = (c,d)=>B('op.or',{ c, d });
+  const rnd   = (a,b)=>B('op.random',{ a, b });
+  const chg   = (a,n)=>B('motion.changeBy',{ a, n });
+  const setTo = (a,n)=>B('motion.setTo',{ a, n });
+  const goto  = (x,y)=>B('motion.goto',{ x, y, z:1 });
+  const glide = (t,x,y)=>B('motion.glide',{ t, x, y, z:1 });
+  const vset  = (v,n)=>B('data.set',{ v, n });
+  const vchg  = (v,n)=>B('data.change',{ v, n });
+  const v     = n=>B('data.get',{ v:n });
+  const say   = s=>B('looks.say',{ s });
+  const hide  = ()=>B('looks.hide');
+  const show  = ()=>B('looks.show');
+
+  /* ================================================== reading code
+     How the bug list knows a bug is fixed: it looks at the blocks, the
+     way a teacher leaning over a shoulder would. Each check asks for the
+     RIGHT shape and, where a student might add the right block and leave
+     the wrong one behind, for the wrong shape to be gone too. */
+  const num = x => (x && typeof x==='object') ? NaN : parseFloat(x);
+  /* every block in an object's code, with the blocks it sits inside */
+  function all(name){
+    const a=actor(name), out=[];
+    const walk=(list,anc,hat)=>(list||[]).forEach(b=>{
+      out.push({ b, anc, hat });
+      if(b.body)  walk(b.body,  anc.concat(b), hat);
+      if(b.body2) walk(b.body2, anc.concat(b), hat);
+    });
+    (a && a.scripts || []).forEach(sc=>walk(sc.body, [], sc.hat));
+    return out;
+  }
+  const inLoop = anc => anc.some(x=>x.op==='ctrl.forever' || x.op==='ctrl.repeat' || x.op==='ctrl.repeatUntil');
+  /* does a condition, or anything nested in it, match */
+  function has(c, f){
+    if(!c || typeof c!=='object' || !c.op) return false;
+    if(f(c)) return true;
+    return Object.values(c.args||{}).some(x=>has(x,f));
+  }
+  const isKey   = k => c => c.op==='sense.key' && c.args.k===k;
+  const isTouch = o => c => c.op==='sense.touch' && c.args.o===o;
+  const isPos   = (x,a) => x && typeof x==='object' && (x.op==='motion.pos' && x.args.a===a);
+  /* `y position < -8` and `-8 > y position` are the same test: which side, and of what */
+  function side(c, a){
+    const out=[];
+    const look=x=>{
+      if(!x || typeof x!=='object' || !x.op) return;
+      if(x.op==='op.lt' || x.op==='op.gt'){
+        const L=x.op==='op.lt';
+        if(isPos(x.args.a,a) && !isNaN(num(x.args.b))) out.push({ s:L?'<':'>', n:num(x.args.b) });
+        if(isPos(x.args.b,a) && !isNaN(num(x.args.a))) out.push({ s:L?'>':'<', n:num(x.args.a) });
+      }
+      Object.values(x.args||{}).forEach(look);
+    };
+    look(c); return out;
+  }
+  /* the blocks directly (or deeper) inside an `if` */
+  const inside = (ifb, f) => { let hit=false;
+    const walk=l=>(l||[]).forEach(b=>{ if(f(b)) hit=true; walk(b.body); walk(b.body2); });
+    walk(ifb.body); return hit; };
+  const ifs = name => all(name).filter(x=>x.b.op==='ctrl.if' || x.b.op==='ctrl.ifelse');
+  const moves = (a, s) => b => b.op==='motion.changeBy' && b.args.a===a && Math.sign(num(b.args.n))===s;
+  const sets  = (vn, s) => b => b.op==='data.set' && b.args.v===vn && Math.sign(num(b.args.n))===s;
+  /* what a key's own `when [key] pressed` script moves */
+  const keyHat = (name,k) => all(name).filter(x=>x.hat && x.hat.op==='event.key' && x.hat.args.k===k).map(x=>x.b);
+  /* every `if key [k] pressed?`, wherever it is */
+  const keyIfAll = (name,k) => ifs(name).filter(x=>has(x.b.args.c, isKey(k)));
+  /* ...and only the ones that WORK: in a loop, and not tucked inside
+     another `if` — dropped into `if key right arrow pressed`, a left-arrow
+     test only runs while → is held down too */
+  const alone = x => !x.anc.some(p=>p.op==='ctrl.if' || p.op==='ctrl.ifelse');
+  const keyIf = (name,k) => keyIfAll(name,k).filter(x=>inLoop(x.anc) && alone(x));
+
+  /* ============================================================ GAMES
+     Ten classic arcade games, each cut down to the few blocks that make it
+     that game. No bugs here: open the blocks to read how it works, change
+     a number, press RUN again. */
+  const toSnake = (dx,dy)=>[vset('dx',dx), vset('dy',dy)];
+  const GAMES=[
+  /* ---------------------------------------------------------- 1 PONG */
+  { id:'pong', icon:'🏓', name:'Pong', topic:'Bounce',
+    lesson:'Hit the ball back.',
+    world:{ court:true },
+    cast:[
+      { name:'Left',  shape:'pong/paddle', x:-15, y:-1 },
+      { name:'Right', shape:'pong/paddle', x:15,  y:-1 },
+      { name:'Ball',  shape:'pong/ball',   x:0,   y:0 }
+    ],
+    vars:{ left:0, right:0, vx:0.15, vy:0.1 },
+    keys:[['W S','left'],['↑ ↓','right']],
+    code(){ return {
+      Left:[ flag(goto(-15,-1), forever(
+        IF(key('w'), chg('y',0.3)),
+        IF(key('s'), chg('y',-0.3)) )) ],
+      Right:[ flag(goto(15,-1), forever(
+        IF(key('up'), chg('y',0.3)),
+        IF(key('down'), chg('y',-0.3)) )) ],
+      Ball:[ flag(goto(0,0), vset('left',0), vset('right',0), forever(
+        chg('x',v('vx')), chg('y',v('vy')),
+        IF(touch('up edge'),   vset('vy',-0.1)),
+        IF(touch('down edge'), vset('vy',0.1)),
+        IF(touch('Left'),  vset('vx',0.15)),
+        IF(touch('Right'), vset('vx',-0.15)),
+        IF(touch('left edge'),  vchg('right',1), goto(0,0)),
+        IF(touch('right edge'), vchg('left',1),  goto(0,0)) )) ]
+    }; } },
+
+  /* --------------------------------------------------------- 2 SNAKE */
+  { id:'snake', icon:'🐍', name:'Snake', topic:'Grow',
+    lesson:'Eat the apple. Grow longer.',
+    world:{},
+    cast:[
+      { name:'Snake', shape:'snake/body',  x:0, y:0 },
+      { name:'Apple', shape:'snake/apple', x:6, y:0 }
+    ],
+    vars:{ score:0, dx:1, dy:0, tail:0.3 },
+    keys:[['↑ ↓ ← →','turn']],
+    code(){ return {
+      Snake:[
+        flag(goto(0,0), vset('score',0), vset('tail',0.3), ...toSnake(1,0), forever(
+          wait(0.15), chg('x',v('dx')), chg('y',v('dy')), B('ctrl.clone'),
+          IF(touch('edge'), goto(0,0), vset('score',0), vset('tail',0.3)) )),
+        onKey('up',    ...toSnake(0,1)),
+        onKey('down',  ...toSnake(0,-1)),
+        onKey('left',  ...toSnake(-1,0)),
+        onKey('right', ...toSnake(1,0)),
+        onClone(wait(v('tail')), B('ctrl.delclone')) ],
+      Apple:[ flag(goto(6,0), forever(
+        IF(touch('Snake'), vchg('score',1), vchg('tail',0.15), goto(rnd(-15,15), rnd(-8,8))) )) ]
+    }; } },
+
+  /* ------------------------------------------------------ 3 BREAKOUT */
+  { id:'breakout', icon:'🧱', name:'Breakout', topic:'Smash',
+    lesson:'Bounce the ball. Break the bricks.',
+    world:{},
+    cast:[
+      { name:'Bat',   shape:'court/bat',   x:0,   y:-8 },
+      { name:'Ball',  shape:'court/ball',  x:0,   y:-6 },
+      { name:'Brick', shape:'court/brick', x:-12, y:6, visible:false }
+    ],
+    vars:{ score:0, vx:0.15, vy:0.2 },
+    keys:[['← →','move']],
+    code(){ return {
+      Bat:[ flag(goto(0,-8), forever(
+        IF(key('left'),  chg('x',-0.4)),
+        IF(key('right'), chg('x',0.4)) )) ],
+      Ball:[ flag(goto(0,-6), vset('score',0), forever(
+        chg('x',v('vx')), chg('y',v('vy')),
+        IF(touch('left edge'),  vset('vx',0.15)),
+        IF(touch('right edge'), vset('vx',-0.15)),
+        IF(touch('up edge'),    vset('vy',-0.2)),
+        IF(touch('Bat'),        vset('vy',0.2)),
+        IF(touch('down edge'),  goto(0,-6)) )) ],
+      Brick:[
+        flag(hide(), goto(-12,6), REP(7, B('ctrl.clone'), chg('x',4))),
+        onClone(show(), forever(
+          IF(touch('Ball'), vset('vy',-0.2), vchg('score',1), B('ctrl.delclone')) )) ]
+    }; } },
+
+  /* ------------------------------------------------ 4 SPACE INVADERS */
+  { id:'invaders', icon:'👾', name:'Space Invaders', topic:'Shoot',
+    lesson:'Shoot the invaders.',
+    world:{ ground:false, base:true },
+    cast:[
+      { name:'Cannon', shape:'space/ship',  x:0,   y:-8 },
+      { name:'Alien',  shape:'space/alien', x:-12, y:5, visible:false },
+      { name:'Laser',  shape:'space/laser', x:0,   y:-7, visible:false }
+    ],
+    vars:{ score:0, speed:0.1 },
+    keys:[['← →','move'],['SPACE','shoot']],
+    code(){ return {
+      Cannon:[ flag(goto(0,-8), forever(
+        IF(key('left'),  chg('x',-0.3)),
+        IF(key('right'), chg('x',0.3)) )) ],
+      Alien:[
+        flag(hide(), vset('score',0), vset('speed',0.1), goto(-12,5), REP(6, B('ctrl.clone'), chg('x',3))),
+        onClone(show(), forever(
+          chg('x',v('speed')),
+          IF(gt(pos('x'),15),  vset('speed',-0.1)),
+          IF(lt(pos('x'),-15), vset('speed',0.1)),
+          IF(touch('Laser'), vchg('score',1), B('ctrl.delclone')) )) ],
+      Laser:[
+        flag(hide(), forever(IF(key('space'),
+          goto(of('x','Cannon'),-7), B('ctrl.clone'), wait(0.3)))),
+        onClone(show(), REP(40, chg('y',0.5)), B('ctrl.delclone')) ]
+    }; } },
+
+  /* -------------------------------------------------------- 5 TETRIS */
+  { id:'tetris', icon:'🟨', name:'Tetris', topic:'Stack',
+    lesson:'Stack the blocks.',
+    world:{ well:true },
+    cast:[ { name:'Block', shape:'tetris/o', x:0, y:8 } ],
+    vars:{},
+    keys:[['← →','move']],
+    code(){ return {
+      Block:[
+        flag(goto(0,8), forever(
+          wait(0.4), chg('y',-2),
+          IF(lt(pos('y'),-10), chg('y',2), B('ctrl.clone'), goto(0,8)),
+          IF(touch('Block'),   chg('y',2), B('ctrl.clone'), goto(0,8)) )),
+        onKey('left',  IF(gt(pos('x'),-6), chg('x',-2))),
+        onKey('right', IF(lt(pos('x'),6),  chg('x',2))) ]
+    }; } },
+
+  /* ------------------------------------------------------- 6 FROGGER */
+  { id:'frogger', icon:'🐸', name:'Frogger', topic:'Cross',
+    lesson:'Cross the road.',
+    world:{ road:true },
+    cast:[
+      { name:'Frog',  shape:'road/frog',  x:0,   y:-9 },
+      { name:'Car',   shape:'road/car',   x:-16, y:-5.4 },
+      { name:'Truck', shape:'road/truck', x:14,  y:-0.6 }
+    ],
+    vars:{},
+    keys:[['↑ ↓ ← →','hop']],
+    code(){ return {
+      Frog:[
+        flag(goto(0,-9), say(''), forever(
+          IF(touch('Car'),   goto(0,-9)),
+          IF(touch('Truck'), goto(0,-9)),
+          IF(gt(pos('y'),6), say('I made it!')) )),
+        onKey('up',    chg('y',1.5)),
+        onKey('down',  chg('y',-1.5)),
+        onKey('left',  chg('x',-1.5)),
+        onKey('right', chg('x',1.5)) ],
+      Car:[ flag(goto(-16,-5.4), forever(chg('x',0.25), IF(gt(pos('x'),18), setTo('x',-18)))) ],
+      Truck:[ flag(goto(14,-0.6), forever(chg('x',-0.35), IF(lt(pos('x'),-18), setTo('x',18)))) ]
+    }; } },
+
+  /* ------------------------------------------------------- 7 PAC-MAN */
+  { id:'pacman', icon:'🟡', name:'Pac-Man', topic:'Chase',
+    lesson:'Eat dots. Run from the ghost.',
+    world:{ maze:true },
+    cast:[
+      { name:'PacMan', shape:'maze/chomp',  x:0,  y:-1 },
+      { name:'Ghost',  shape:'maze/blinky', x:10, y:4 },
+      { name:'Dot',    shape:'maze/dot',    x:-8, y:4 }
+    ],
+    vars:{ score:0 },
+    keys:[['↑ ↓ ← →','move']],
+    code(){ return {
+      PacMan:[ flag(goto(0,-1), vset('score',0), forever(
+        IF(key('up'),    chg('y',0.2)),
+        IF(key('down'),  chg('y',-0.2)),
+        IF(key('left'),  chg('x',-0.2)),
+        IF(key('right'), chg('x',0.2)),
+        IF(touch('Ghost'), goto(0,-1)) )) ],
+      Ghost:[ flag(goto(10,4), forever(glide(2, of('x','PacMan'), of('y','PacMan')))) ],
+      Dot:[ flag(goto(-8,4), forever(
+        IF(touch('PacMan'), vchg('score',1), goto(rnd(-13,13), rnd(-7,6))) )) ]
+    }; } },
+
+  /* ----------------------------------------------------- 8 ASTEROIDS */
+  { id:'asteroids', icon:'🪨', name:'Asteroids', topic:'Drift',
+    lesson:'Blast the rocks.',
+    world:{},
+    cast:[
+      { name:'Ship', shape:'rocks/ship', x:0,   y:-1 },
+      { name:'Rock', shape:'rocks/rock', x:-14, y:6 },
+      { name:'Shot', shape:'rocks/shot', x:0,   y:0, visible:false }
+    ],
+    vars:{ score:0 },
+    keys:[['↑ ↓ ← →','fly'],['SPACE','shoot']],
+    code(){ return {
+      Ship:[ flag(goto(0,-1), vset('score',0), forever(
+        IF(key('up'),    chg('y',0.25)),
+        IF(key('down'),  chg('y',-0.25)),
+        IF(key('left'),  chg('x',-0.25)),
+        IF(key('right'), chg('x',0.25)),
+        IF(touch('Rock'), goto(0,-1)) )) ],
+      Rock:[ flag(goto(-14,6), forever(
+        chg('x',0.1), chg('y',-0.07),
+        IF(gt(pos('x'),17),  setTo('x',-17)),
+        IF(lt(pos('y'),-10), setTo('y',10)),
+        IF(touch('Shot'), vchg('score',1), goto(-17, rnd(-8,8))) )) ],
+      Shot:[
+        flag(hide(), forever(IF(key('space'),
+          goto(of('x','Ship'), of('y','Ship')), B('ctrl.clone'), wait(0.3)))),
+        onClone(show(), REP(30, chg('y',0.6)), B('ctrl.delclone')) ]
+    }; } },
+
+  /* -------------------------------------------------------- 9 GALAGA */
+  { id:'galaga', icon:'🐝', name:'Galaga', topic:'Dive',
+    lesson:'Shoot the bees before they dive.',
+    world:{ stars:true },
+    cast:[
+      { name:'Fighter', shape:'galaga/fighter', x:0,  y:-8 },
+      { name:'Bee',     shape:'galaga/bee',     x:-8, y:6, visible:false },
+      { name:'Shot',    shape:'galaga/shot',    x:0,  y:-7, visible:false }
+    ],
+    vars:{ score:0 },
+    keys:[['← →','move'],['SPACE','shoot']],
+    code(){ return {
+      Fighter:[ flag(goto(0,-8), vset('score',0), forever(
+        IF(key('left'),  chg('x',-0.3)),
+        IF(key('right'), chg('x',0.3)),
+        IF(touch('Bee'), goto(0,-8)) )) ],
+      Bee:[
+        flag(hide(), goto(-8,6), REP(3, B('ctrl.clone'), chg('x',8))),
+        onClone(show(), forever(
+          glide(1, rnd(-14,14), 6),
+          glide(2, of('x','Fighter'), -9),
+          goto(rnd(-14,14), 9) )),
+        onClone(forever(IF(touch('Shot'), vchg('score',1), goto(rnd(-14,14), 9), B('ctrl.clone'), B('ctrl.delclone')))) ],
+      Shot:[
+        flag(hide(), forever(IF(key('space'),
+          goto(of('x','Fighter'),-7), B('ctrl.clone'), wait(0.3)))),
+        onClone(show(), REP(40, chg('y',0.5)), B('ctrl.delclone')) ]
+    }; } },
+
+  /* ----------------------------------------------------- 10 CENTIPEDE */
+  { id:'centipede', icon:'🐛', name:'Centipede', topic:'Wiggle',
+    lesson:'Shoot the centipede.',
+    world:{},
+    cast:[
+      { name:'Shooter',  shape:'centi/wand',   x:0,   y:-9 },
+      { name:'Body',     shape:'centi/body',   x:-15, y:8, visible:false, local:{ speed:0.15 } },
+      { name:'Mushroom', shape:'centi/shroom', x:0,   y:0, visible:false },
+      { name:'Dart',     shape:'centi/dart',   x:0,   y:-8, visible:false }
+    ],
+    vars:{ score:0 },
+    keys:[['← →','move'],['SPACE','shoot']],
+    code(){ return {
+      Shooter:[ flag(goto(0,-9), vset('score',0), forever(
+        IF(key('left'),  chg('x',-0.3)),
+        IF(key('right'), chg('x',0.3)),
+        IF(touch('Body'), goto(0,-9)) )) ],
+      Body:[
+        flag(hide(), goto(-15,8), vset('speed',0.15), REP(8, B('ctrl.clone'), wait(0.15))),
+        onClone(show(), forever(
+          chg('x',v('speed')),
+          IF(gt(pos('x'),15),  vset('speed',-0.15), chg('y',-1)),
+          IF(lt(pos('x'),-15), vset('speed',0.15),  chg('y',-1)),
+          IF(touch('Mushroom'), vset('speed',B('op.sub',{ a:0, b:v('speed') })), chg('y',-1)),
+          IF(lt(pos('y'),-9), setTo('y',8)),
+          IF(touch('Dart'), vchg('score',1), B('ctrl.delclone')) )) ],
+      Mushroom:[
+        flag(hide(), REP(10, goto(rnd(-14,14), rnd(-5,6)), B('ctrl.clone'))),
+        onClone(show(), forever(IF(touch('Dart'), B('ctrl.delclone')))) ],
+      Dart:[
+        flag(hide(), forever(IF(key('space'),
+          goto(of('x','Shooter'),-8), B('ctrl.clone'), wait(0.25)))),
+        onClone(show(), REP(40, chg('y',0.5)), B('ctrl.delclone')) ]
+    }; } }
+  ];
+  GAMES.forEach(g=>g.bugs=[]);
+
+  /* ======================================================= the shelf
+     EVERY BLOCK IS THERE. Nothing is hidden: a debugging game should never
+     be won by only offering the answer. Variables and My Blocks can be
+     made too. `defaults` only decides what a block says when it comes off
+     the shelf. */
+  const SHELF={ locked:true, make:true, defaults:{
+    'motion.changeBy': { a:'x', n:0.2 },
+    'motion.goto':     { x:0, y:0, z:1 },
+    'motion.glide':    { t:1, x:0, y:0, z:1 },
+    'sense.touch':     { o:'edge' },
+    'sense.key':       { k:'space' },
+    'event.key':       { k:'space' },
+    'ctrl.stop':       { w:'all' }
+  } };
+
+  /* ============================================================ words */
+  Object.assign(window.ES = window.ES || {}, {
+    'ARCADE':'ARCADE','Ten games. Pick one.':'Diez juegos. Escoge uno.',
+    'See the code':'Mira el código','Open the blocks.':'Abre los bloques.',
+    'Put this game\'s code back the way it was?':'¿Regresar el código de este juego a como estaba?',
+    'Hit the ball back.':'Regresa la pelota.','Eat the apple. Grow longer.':'Come la manzana. Crece más.',
+    'Bounce the ball. Break the bricks.':'Rebota la pelota. Rompe los ladrillos.',
+    'Shoot the invaders.':'Dispara a los invasores.','Stack the blocks.':'Apila los bloques.',
+    'Cross the road.':'Cruza la calle.','Eat dots. Run from the ghost.':'Come puntos. Huye del fantasma.',
+    'Blast the rocks.':'Destruye las rocas.','Shoot the bees before they dive.':'Dispara a las abejas antes de que bajen.',
+    'Shoot the centipede.':'Dispara al ciempiés.',
+    'left':'izquierda','right':'derecha','turn':'girar','move':'mover','shoot':'disparar','hop':'saltar','fly':'volar',
+    'BUG SQUAD':'ESCUADRÓN DE BICHOS',
+    'Six arcade games. All broken.':'Seis juegos de arcade. Todos rotos.',
+    'Run it':'Juégalo','Watch what goes wrong.':'Mira qué sale mal.',
+    'Open the blocks':'Abre los bloques','Drag, click, fix.':'Arrastra, haz clic, arregla.',
+    'Find the bugs':'Encuentra los bichos','3 in every game. 💡 if stuck.':'3 en cada juego. 💡 si te atoras.',
+    'Start':'Empezar','Play':'Jugar','How to play':'Cómo jugar','Start this game over':'Empezar este juego de nuevo',
+    'Download my code':'Descargar mi código',
+    '<b>&lt;</b> less than &nbsp; <b>&gt;</b> greater than':'<b>&lt;</b> menor que &nbsp; <b>&gt;</b> mayor que',
+    'The bomb never falls':'La bomba nunca cae',
+    'The bomb starts at y 6. Is 6 greater than -9?':'La bomba empieza en y 6. ¿Es 6 mayor que -9?',
+    'The bomber gets stuck on the right':'El bombardero se atora a la derecha',
+    'Look at the two <code>if</code> blocks. Which side is the left wall on?':'Mira los dos bloques <code>if</code>. ¿De qué lado está la pared izquierda?',
+    'It says "You win!" before you catch anything':'Dice "You win!" antes de que atrapes algo',
+    'At the start the score is 0. Is 0 less than 9?':'Al principio los puntos son 0. ¿Es 0 menor que 9?',
+    'My badge':'Mi insignia','You did it!':'¡Lo lograste!','Your name':'Tu nombre',
+    'Download badge':'Descargar insignia','MASTER DEBUGGER':'MAESTRO DEPURADOR',
+    '18 of 18 bugs fixed':'18 de 18 bichos arreglados','Teacher':'Maestro','Teacher code':'Código del maestro',
+    'That code is not right.':'Ese código no es correcto.','Leave teacher mode?':'¿Salir del modo maestro?',
+    'Leave teacher mode':'Salir del modo maestro','Answer':'Respuesta','Bugs':'Bichos',
+    'Load the fixed code':'Cargar el código arreglado','Load the broken code':'Cargar el código con bichos',
+    'FIX THE BROKEN ARCADE GAMES':'ARREGLA LOS JUEGOS DE ARCADE ROTOS',
+    'Six classic games, and every one has <b>3 bugs</b> in its code. Press <b>RUN</b> and watch what goes wrong. Then open the <b>BLOCKS</b> and fix it. The bug list at the bottom turns 🐞 into ✅ when a bug is fixed.':
+      'Seis juegos clásicos, y cada uno tiene <b>3 bichos</b> (errores) en su código. Presiona <b>JUGAR</b> y mira qué sale mal. Luego abre los <b>BLOQUES</b> y arréglalo. La lista de abajo cambia 🐞 por ✅ cuando arreglas un error.',
+    'HOW TO FIX':'CÓMO ARREGLAR',
+    '<b>Drag</b> a block anywhere: between two blocks, into a loop, out of a loop.':
+      '<b>Arrastra</b> un bloque a cualquier lugar: entre dos bloques, dentro de un bucle, fuera de un bucle.',
+    '<b>Change</b> a number, a letter or a menu by clicking it.':
+      '<b>Cambia</b> un número, una letra o un menú haciendo clic en él.',
+    '<b>Take a block away</b> with its ✕, or drag it back onto the shelf. Only that block goes — the blocks inside it stay.':
+      '<b>Quita un bloque</b> con su ✕, o arrástralo de vuelta al estante. Solo se va ese bloque — los bloques de adentro se quedan.',
+    '<b>Stuck?</b> Press 💡 next to a bug for a hint.':'<b>¿Atascado?</b> Presiona 💡 junto a un bicho para una pista.',
+    'THE GAMES':'LOS JUEGOS',
+    'Start fixing ▶':'Empezar a arreglar ▶',
+    'Space Blaster':'Space Blaster (Nave)','Road Hopper':'Road Hopper (Rana)','Chomp':'Chomp (Come-cocos)',
+    'Bomb Catch':'Bomb Catch (Atrapa bombas)','Brick Smash':'Brick Smash (Ladrillos)','Jump Bros':'Jump Bros (Saltos)',
+    'Indentation':'Sangría (adentro/afuera)','Plus and minus':'Más y menos','x and y':'x y y',
+    'Less than, greater than':'Menor que, mayor que','Sensing':'Sensores','Jumping':'Saltar',
+    'move':'mover','shoot':'disparar','hop':'saltar','move the bucket':'mover la cubeta',
+    'move the bat':'mover el bate','walk':'caminar','jump':'saltar',
+    'BLOCKS':'BLOQUES','RUN':'JUGAR','STOP':'PARAR','DOWNLOAD SCRIPT':'DESCARGAR CÓDIGO',
+    'Show the instructions again':'Ver las instrucciones otra vez',
+    'Sound on':'Sonido activado','Sound off':'Sonido apagado',
+    'Put this game\'s code back the way it was':'Volver a poner el código de este juego como estaba',
+    'Put this game\'s code back the way it was?':'¿Volver a poner el código de este juego como estaba, con bichos y todo?',
+    'Save the code of this game as a PDF, to hand in':'Guarda el código de este juego como PDF para entregarlo',
+    'Your name, for the top of the page:':'Tu nombre, para la parte de arriba de la página:',
+    'Block code':'Código de bloques','Student:':'Estudiante:','Date:':'Fecha:','Bugs fixed:':'Bichos arreglados:',
+    '(no name)':'(sin nombre)','(no blocks yet)':'(todavía no hay bloques)',
+    'Teacher view — answer key loaded':'Vista del maestro — respuestas cargadas',
+    'BUGS':'BICHOS','Hint':'Pista',
+    'GAME FIXED!':'¡JUEGO ARREGLADO!','Next game ▶':'Siguiente juego ▶',
+    'You fixed all 18 bugs. You are a real debugger!':'Arreglaste los 18 bichos. ¡Eres un verdadero depurador!',
+    'Press <b>RUN</b> to play':'Presiona <b>JUGAR</b> para jugar',
+    'Bug Squad could not start':'Bug Squad no pudo arrancar',
+    'Try a different browser, or ask a teacher.':'Prueba otro navegador o pregúntale al maestro.',
+    'Lesson':'Lección','score':'puntos',
+    'Delete this whole script, and every block under it?':'¿Borrar todo este guion y todos los bloques de abajo?',
+    /* the six lessons and eighteen bugs */
+    'Inside the loop = repeats. Outside = once.':'Dentro del bucle = se repite. Afuera = una vez.',
+    '← does nothing':'← no hace nada',
+    'A block outside the loop runs only once, at the very start.':'Un bloque fuera del bucle se ejecuta una sola vez, al principio.',
+    'The laser won\'t fly':'El láser no vuela',
+    'An empty <code>repeat</code> repeats… nothing. What should it repeat?':'Un <code>repeat</code> vacío repite… nada. ¿Qué debería repetir?',
+    'The alien is invisible':'El alien es invisible',
+    'The alien hides every time round the loop. Should it hide only sometimes?':'El alien se esconde en cada vuelta del bucle. ¿Debería esconderse solo a veces?',
+    '<b>+</b> up / right &nbsp; <b>−</b> down / left':'<b>+</b> arriba / derecha &nbsp; <b>−</b> abajo / izquierda',
+    '↑ hops down':'↑ salta abajo',
+    'On <b>y</b>, which way does a plus number go?':'En <b>y</b>, ¿hacia dónde va un número positivo?',
+    '↓ hops up':'↓ salta arriba',
+    'Down is the opposite of up. Compare it with the ↑ block.':'Abajo es lo contrario de arriba. Compáralo con el bloque de ↑.',
+    '→ hops left':'→ salta a la izquierda',
+    'Look at the ← block. What should be different for →?':'Mira el bloque de ←. ¿Qué debería ser diferente para →?',
+    '<b>x</b> ↔ &nbsp;&nbsp; <b>y</b> ↕':'<b>x</b> ↔ &nbsp;&nbsp; <b>y</b> ↕',
+    '↑ goes right':'↑ va a la derecha',
+    'Which letter goes up and down?':'¿Qué letra va arriba y abajo?',
+    '↓ goes left':'↓ va a la izquierda',
+    'Up and down both use the same letter.':'Arriba y abajo usan la misma letra.',
+    '→ goes up':'→ va arriba',
+    'Which letter goes across?':'¿Qué letra va de lado a lado?',
+    'Sensing asks: <b>touching?</b> <b>pressed?</b>':'Los sensores preguntan: <b>¿tocando?</b> <b>¿presionada?</b>',
+    'Which key is the Bat listening for?':'¿Qué tecla está escuchando el Bate?',
+    'The ball goes through the bat':'La pelota atraviesa el bate',
+    'When the ball bounces up, what is it checking for?':'Cuando la pelota rebota hacia arriba, ¿qué está revisando?',
+    'Bricks never break':'Los ladrillos no se rompen',
+    'What should a brick touch to break?':'¿Qué debería tocar un ladrillo para romperse?',
+    'Jump ↑ &nbsp; Fall ↓ &nbsp; Land ▁':'Salta ↑ &nbsp; Cae ↓ &nbsp; Aterriza ▁',
+    'SPACE sinks the hero':'SPACE hunde al héroe',
+    'Does a minus speed go up or down?':'¿Una velocidad negativa va arriba o abajo?',
+    'No gravity':'No hay gravedad',
+    'After a jump, what pulls you back down? Look in Variables.':'Después de un salto, ¿qué te jala hacia abajo? Busca en Variables.',
+    'The hero can\'t jump':'El héroe no puede saltar',
+    'The ground is the line <code>y = 0</code>. Should the hero snap back when it is above it, or below it?':'El suelo es la línea <code>y = 0</code>. ¿El héroe debe volver cuando está arriba o abajo de ella?'
+  });
+
+  /* ==================================================== the objects */
+  const actor = n => (window.VM ? VM.actorByName(n) : null);
+  const AX = k => (window.BLOCKS ? BLOCKS.AXES.find(a=>a.v===k) : null);
+  const wr = (a,k,val)=>{ const x=AX(k); if(a&&x) a[x.field]=x.sign*val; };
+
+  let gi=0;                  // which game is on
+  const kept={};             // a game's code while the student is away at another one
+  let stars={};
+  /* earlier versions kept progress in the browser; clear it */
+  OLD_KEYS.forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+  const game = () => GAMES[gi];
+
+  /* ==================================================== the scenery
+     Flat coloured strips under the characters: a road, a court, some
+     stars, a patch of grass. Scenery, not objects — nothing to program. */
+  function strip(x0,y0,x1,y1,col,layer){
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(x1-x0, y1-y0),
+      new THREE.MeshBasicMaterial({ color:col }));
+    m.rotation.x=-Math.PI/2;
+    m.position.set((x0+x1)/2, -0.05+0.001*(layer||0), -(y0+y1)/2);
+    G.roomGroup.add(m); return m;
+  }
+  const W={ x0:-17, x1:17, y0:-10, y1:10 };           // the screen, in squares
+  /* words painted on the floor of the screen: `h` tall, bottom-left at x,y */
+  function label(text, x, y, col, h){
+    const cv=document.createElement('canvas'), c=cv.getContext('2d'), px=64;
+    c.font='bold '+px+'px ui-monospace, Menlo, monospace';
+    const w=Math.ceil(c.measureText(text).width)+8;
+    cv.width=w; cv.height=px+16;
+    c.font='bold '+px+'px ui-monospace, Menlo, monospace';
+    c.fillStyle=col; c.textBaseline='top'; c.fillText(text,4,6);
+    const tex=new THREE.CanvasTexture(cv);
+    const ww=h*cv.width/cv.height;
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(ww,h),
+      new THREE.MeshBasicMaterial({ map:tex, transparent:true }));
+    m.rotation.x=-Math.PI/2;
+    m.position.set(x+ww/2, -0.04+0.004, -(y+h/2));
+    G.roomGroup.add(m);
+  }
+  function build(){
+    if(G.roomGroup) G.scene.remove(G.roomGroup);
+    G.roomGroup=new THREE.Group(); G.scene.add(G.roomGroup);
+    G.solids=[]; G.hits=[]; G.ceiling=null; G.ground=()=>0;
+    G.scene.background=new THREE.Color('#0b0a1c');
+    G.scene.fog=null;
+    const w=game().world;
+    strip(W.x0,W.y0,W.x1,W.y1, COSTUMES.SCREEN, 0);
+    /* the four walls of the screen, so an edge is somewhere you can see */
+    const e=0.15, wall='#3b3a6b';
+    strip(W.x0-e,W.y1,W.x1+e,W.y1+e,wall,1); strip(W.x0-e,W.y0-e,W.x1+e,W.y0,wall,1);
+    strip(W.x0-e,W.y0,W.x0,W.y1,wall,1);     strip(W.x1,W.y0,W.x1+e,W.y1,wall,1);
+    if(w.stars){ let s=3; const r=()=>{ s=(s*16807)%2147483647; return s/2147483647; };
+      for(let i=0;i<70;i++){ const x=W.x0+r()*34, y=W.y0+r()*20, z=0.06+r()*0.08;
+        strip(x,y,x+z,y+z, r()<0.3?'#8fd3ff':'#d8d8ff', 2); } }
+    if(w.road){
+      strip(W.x0,-10,W.x1,-7.6,'#274d2b',1);                    // the start: grass
+      strip(W.x0,-6.3,W.x1,-3.3,'#34344a',1); strip(W.x0,-1.5,W.x1,1.5,'#34344a',1);
+      for(let x=-16;x<17;x+=3){ strip(x,-4.85,x+1.4,-4.75,'#e6d35a',2); strip(x,-0.05,x+1.4,0.05,'#e6d35a',2); }
+      strip(W.x0,6.5,W.x1,10,'#274d2b',1);                      // the goal: grass
+      strip(W.x0,6.4,W.x1,6.6,'#5dff7a',2);
+    }
+    if(w.maze){
+      const b='#2b3bff', t=0.3;
+      [[-15,-8.5,15,-8.5+t],[-15,8.2-t,15,8.2],[-15,-8.5,-15+t,8.2],[15-t,-8.5,15,8.2]]
+        .forEach(q=>strip(q[0],q[1],q[2],q[3],b,1));
+    }
+    if(w.court){ for(let y=-9.5;y<10;y+=1.4) strip(-0.1,y,0.1,y+0.7,'#3b3a6b',1); }
+    /* A COORDINATE GRID: a faint line every 5 squares, numbered along the edges */
+    if(w.grid){
+      for(let x=-15;x<=15;x+=5){ strip(x-0.03,W.y0,x+0.03,W.y1,'#26244d',1); label(String(x), x, W.y0+0.25, '#8d8bb8', 0.7); }
+      for(let y=-5;y<=5;y+=5){ strip(W.x0,y-0.03,W.x1,y+0.03,'#26244d',1); label(String(y), W.x0+0.8, y+0.15, '#8d8bb8', 0.7); }
+    }
+    /* THE BOUNDARIES THE CODE TESTS, as dashed lines with their numbers */
+    (w.marks||[]).forEach(m=>{
+      const a=m.from!=null?m.from:(m.x!=null?W.y0:W.x0), b=m.to!=null?m.to:(m.x!=null?W.y1:W.x1);
+      for(let t=a;t<b;t+=0.8){
+        if(m.x!=null) strip(m.x-0.06,t,m.x+0.06,Math.min(b,t+0.45),m.col,3);
+        else          strip(t,m.y-0.06,Math.min(b,t+0.45),m.y+0.06,m.col,3);
+      }
+      /* labels sit out in the open, clear of the corners and the score */
+      if(m.x!=null) label('x = '+m.x, m.x-3.4, 1.2, m.col, 0.8);
+      else          label('y = '+m.y, m.to!=null ? m.to-2 : -11, m.y+(m.y<0?0.3:-1.1), m.col, 0.8);
+    });
+    if(w.well){ [[-7.4,-7.1],[7.1,7.4]].forEach(q=>strip(q[0],W.y0,q[1],W.y1,'#5d5bb0',2)); }
+    if(w.ground){ strip(W.x0,-10,W.x1,0,'#7a4a24',1); strip(W.x0,-0.5,W.x1,0,'#45b83a',2); }
+  }
+
+  /* ==================================================== loading a game */
+  function cast(){
+    const g=game();
+    VM.project.actors.slice().forEach(a=>VM.delActor(a));
+    g.cast.forEach(c=>{
+      const a=VM.addActor({ name:c.name, shape:c.shape, colour:COSTUMES.C[c.shape].ink, size:1 });
+      a.dir=0; a.tilt=0; a.roll=0; a.visible=c.visible!==false;
+      wr(a,'x',c.x); wr(a,'y',c.y); a.y=1;
+      a.vars={ ...(c.local||{}) };
+      VM.sync(a); VM.setHome(a);
+    });
+    VM.project.vars={ ...g.vars };
+    VM.project.lists={}; VM.project.procs=VM.project.procs||[];
+  }
+  const handed = (g, fixed) => JSON.parse(JSON.stringify(g.code(fixed==null ? teacher : !!fixed)));
+  function given(code){
+    const g=game(), all_=code || handed(g);
+    g.cast.forEach(c=>{ const a=actor(c.name); if(a) a.scripts=JSON.parse(JSON.stringify(all_[c.name]||[])); });
+  }
+  function remember(){
+    const g=game(), out={};
+    g.cast.forEach(c=>{ const a=actor(c.name); out[c.name]=a ? a.scripts : []; });
+    kept[g.id]=JSON.parse(JSON.stringify(out));
+  }
+  function load(i){
+    if(VM.running) VM.stopAll();
+    if(on) remember();
+    gi=Math.max(0, Math.min(GAMES.length-1, i));
+    window.LEVELS=Object.assign(window.LEVELS||{}, { bugs:{ w:34, d:20 } });
+    build();
+    VM.enter(G.roomGroup);
+    cast();
+    given(kept[game().id]);
+    fixedWas=null; celebrated=false; hints={};
+    if(window.CODER){
+      CODER.restrict(SHELF);
+      CODER.setActor(actor(game().cast[0].name));
+    }
+    words();
+  }
+  function original(){
+    if(!confirm(T('Put this game\'s code back the way it was, bugs and all?'))) return;
+    VM.stopAll();
+    delete kept[game().id];
+    load(gi);
+  }
+
+  /* ======================================================== sounds */
+  const SND=(function(){
+    let ctx=null, on=true;
+    try{ on=localStorage.getItem(SOUND_KEY)!=='off'; }catch(e){}
+    function ac(){
+      if(!ctx){ const A=window.AudioContext||window.webkitAudioContext; if(!A) return null;
+        try{ ctx=new A(); }catch(e){ return null; } }
+      if(ctx.state==='suspended') ctx.resume();
+      return ctx;
+    }
+    function tone(f0, f1, dur, type, vol, delay){
+      if(!on) return;
+      const c=ac(); if(!c) return;
+      const t0=c.currentTime+(delay||0);
+      const o=c.createOscillator(), g=c.createGain();
+      o.type=type||'square';
+      o.frequency.setValueAtTime(f0,t0);
+      if(f1) o.frequency.exponentialRampToValueAtTime(f1,t0+dur);
+      g.gain.setValueAtTime(vol||0.04,t0);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(t0); o.stop(t0+dur+0.02);
+    }
+    return {
+      wake(){ if(on) ac(); },
+      squash(){ tone(300, 900, 0.12, 'square', 0.04); tone(1200, 0, 0.1, 'square', 0.03, 0.12); },
+      win(){ [523,659,784,1047].forEach((f,i)=>tone(f,0,0.16,'square',0.035,i*0.13)); },
+      get on(){ return on; },
+      set on(v){ on=!!v; try{ localStorage.setItem(SOUND_KEY, on?'on':'off'); }catch(e){} }
+    };
+  })();
+
+  /* ============================================== checking the bugs */
+  let fixedWas=null, celebrated=false, hints={}, beat=0;
+  function status(){
+    return game().bugs.map(b=>{ try{ return !!b.ok(); }catch(e){ return false; } });
+  }
+  function checkBugs(){
+    const now=status();
+    const key_=now.join();
+    if(fixedWas!==null && key_!==fixedWas){
+      const before=fixedWas.split(',');
+      if(now.some((x,i)=>x && before[i]!=='true')) SND.squash();
+    }
+    fixedWas=key_;
+    const done=now.every(Boolean);
+    if(false){ celebrated=true; SND.win();
+      if(!teach && allStars() && !badgeShown){ badgeShown=true; setTimeout(badge, 900); } }
+    if(!done) celebrated=false;
+    levels();
+  }
+  /* THE THREE BUGS, down the side of the game: one short line each,
+     always showing, and 💡 for a one-line hint when you want it. */
+  function bugPanel(now){
+    const el=$('#bsBugs'); if(!el) return;
+    now = now || status();
+    const g=game(), done=now.every(Boolean), last=gi===GAMES.length-1;
+    const html=`
+      <div class="bs-head">🐞 ${T('BUGS')} ${now.filter(Boolean).length}/3</div>
+      ${g.bugs.map((b,i)=>`
+        <div class="bs-item${now[i]?' ok':''}">
+          <span class="bs-ico">${now[i]?'✅':'🐞'}</span>
+          <span class="bs-what">${T(b.what)}
+            ${hints[i]&&!now[i] ? `<small>💡 ${T(b.hint)}</small>` : ''}</span>
+          ${now[i]||hints[i] ? '' : `<button class="bs-hbtn" data-hint="${i}" title="${T('Hint')}">💡</button>`}
+        </div>`).join('')}
+      ${teach ? `<div class="bs-teach">
+          <button class="dn-btn" id="bsAns" title="${T('Load the fixed code')}">✅ ${T('Answer')}</button>
+          <button class="dn-btn" id="bsBug" title="${T('Load the broken code')}">🐞 ${T('Bugs')}</button></div>` : ''}
+      ${done ? `<div class="bs-done">🏆 ${last?'':`<button class="dn-btn bs-next" id="bsNext">▶</button>`}</div>` : ''}
+      ${allStars() ? `<button class="dn-btn bs-badge" id="bsBadge">🏅 ${T('My badge')}</button>` : ''}`;
+    if(el.dataset.html!==html){
+      el.dataset.html=html; el.innerHTML=html;
+      el.querySelectorAll('[data-hint]').forEach(x=>x.onclick=()=>{ hints[+x.dataset.hint]=true; bugPanel(); });
+      const nx=$('#bsNext'); if(nx) nx.onclick=()=>{ load(gi+1); intro(); };
+      const bd=$('#bsBadge'); if(bd) bd.onclick=badge;
+      const an=$('#bsAns'); if(an) an.onclick=()=>swap(true);
+      const bg=$('#bsBug'); if(bg) bg.onclick=()=>swap(false);
+    }
+  }
+  /* a teacher swaps this game's code for the answer key, or back to the bugs */
+  function swap(fixed){
+    VM.stopAll();
+    delete kept[game().id];
+    given(handed(game(), fixed));
+    VM.project.actors.filter(a=>a.isClone).slice().forEach(a=>VM.delActor(a));
+    game().cast.forEach(c=>{ const a=actor(c.name); if(a) VM.resetActor(a); });
+    Object.assign(VM.project.vars, game().vars);
+    hints={}; fixedWas=null;
+    if(window.CODER) CODER.render();
+    checkBugs();
+  }
+  function teacherKey(){
+    if(teach){
+      if(!confirm(T('Leave teacher mode?'))) return;
+      teach=false; try{ sessionStorage.removeItem(TEACH_KEY); }catch(e){}
+    } else {
+      const c=prompt(T('Teacher code'));
+      if(c===null) return;
+      if(c.trim()!==TEACH_CODE){ alert(T('That code is not right.')); return; }
+      teach=true; try{ sessionStorage.setItem(TEACH_KEY,'on'); }catch(e){}
+    }
+    words();
+  }
+  function levels(){
+    const el=$('#bsLevels'); if(!el) return;
+    const html=GAMES.map((g,i)=>`<button class="bs-lvl${i===gi?' on':''}${stars[g.id]?' star':''}" data-g="${i}"
+        title="${T(g.name)}">${g.icon}</button>`).join('');
+    if(el.dataset.html!==html){
+      el.dataset.html=html; el.innerHTML=html;
+      el.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{ b.blur(); load(+b.dataset.g); intro(); });
+    }
+  }
+
+  /* ============================================= the code, as a PDF
+     The same hand-written PDF Dino Run makes: this game's code, every
+     object under its own heading, with how many bugs are fixed. */
+  const ASCII = str => String(str==null?'':str).normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/▶ */g,'').replace(/[−–—]/g,'-').replace(/×/g,'*').replace(/÷/g,'/')
+    .replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...')
+    .replace(/[^\x20-\x7e]/g,'?');
+  function inline(bk){
+    const bd=window.BLOCKS && BLOCKS.of(bk.op); if(!bd) return bk.op;
+    return BLOCKS.parts(bd.label).map(seg=>{
+      if(seg[0]!=='%') return seg;
+      const k=seg[1], sp=bd.args[k]||{}, val=(bk.args||{})[k];
+      if(val && typeof val==='object' && val.op){
+        const kd=(BLOCKS.of(val.op)||{}).kind;
+        return kd==='bool' ? '<'+inline(val)+'>' : '('+inline(val)+')';
+      }
+      if(sp.type==='bool') return '< >';
+      if(sp.type==='num' || sp.type==='str') return '('+(val==null?'':val)+')';
+      return '['+(val==null?'':val)+']';
+    }).join('');
+  }
+  function lines(list, depth, out){
+    const pad='    '.repeat(depth);
+    (list||[]).forEach(bk=>{
+      out.push(pad+inline(bk));
+      const kd=(BLOCKS.of(bk.op)||{}).kind;
+      if(kd==='c' || kd==='c2'){
+        lines(bk.body, depth+1, out);
+        if(kd==='c2'){ out.push(pad+'else'); lines(bk.body2, depth+1, out); }
+        out.push(pad+'end');
+      }
+    });
+    return out;
+  }
+  function scriptText(name){
+    const a=actor(name), out=[];
+    (a && a.scripts || []).forEach((sc,i)=>{
+      if(i) out.push('');
+      if(sc.hat){ out.push(inline(sc.hat)); lines(sc.body, 1, out); }
+      else lines(sc.body, 0, out);
+    });
+    return out.length ? out : [T('(no blocks yet)')];
+  }
+  function pdf(rows){
+    const W_=612, H=792, M=54, LH=13, COLS=84, PER=Math.floor((H-2*M)/LH);
+    const wrapped=[];
+    rows.forEach(r=>{
+      let s=ASCII(r.t), lead=(s.match(/^ */)||[''])[0]+'      ';
+      if(!s.length){ wrapped.push({ t:'', b:r.b }); return; }
+      while(s.length>COLS){ wrapped.push({ t:s.slice(0,COLS), b:r.b }); s=lead+s.slice(COLS); }
+      wrapped.push({ t:s, b:r.b });
+    });
+    const pages=[];
+    for(let i=0;i<wrapped.length;i+=PER) pages.push(wrapped.slice(i,i+PER));
+    const esc=s=>s.replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+    const objs=[];
+    objs[0]='<< /Type /Catalog /Pages 2 0 R >>';
+    objs[2]='<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>';
+    objs[3]='<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>';
+    const kids=[];
+    pages.forEach((pg,n)=>{
+      const pageNo=6+n*2, streamNo=pageNo+1;
+      let body='BT\n'+LH+' TL\n'+M+' '+(H-M)+' Td\n';
+      pg.forEach(r=>{ body+=(r.b?'/F2':'/F1')+' 10 Tf\n('+esc(r.t)+') Tj T*\n'; });
+      body+='/F1 8 Tf\nET\nBT /F1 8 Tf '+(W_-M-60)+' '+(M/2)+' Td (page '+(n+1)+' of '+pages.length+') Tj ET\n';
+      objs[pageNo-1]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+W_+' '+H+'] '+
+        '/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents '+streamNo+' 0 R >>';
+      objs[streamNo-1]='<< /Length '+body.length+' >>\nstream\n'+body+'endstream';
+      kids.push(pageNo+' 0 R');
+    });
+    objs[1]='<< /Type /Pages /Kids ['+kids.join(' ')+'] /Count '+pages.length+' >>';
+    objs[4]='<< /Producer (Bug Squad) >>';
+    let out='%PDF-1.4\n'; const at=[];
+    objs.forEach((o,i)=>{ at[i]=out.length; out+=(i+1)+' 0 obj\n'+o+'\nendobj\n'; });
+    const xref=out.length;
+    out+='xref\n0 '+(objs.length+1)+'\n0000000000 65535 f \n'+
+      at.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+
+      'trailer\n<< /Size '+(objs.length+1)+' /Root 1 0 R /Info 5 0 R >>\nstartxref\n'+xref+'\n%%EOF\n';
+    return out;
+  }
+  function handIn(name){
+    const g=game(), now=status();
+    const labels=[T('Student:'), T('Date:'), T('Bugs fixed:')];
+    const w=Math.max(...labels.map(l=>l.length))+2;
+    const rows=[
+      { t:'BUG SQUAD - '+g.name.toUpperCase()+' - '+T('Block code'), b:true },
+      { t:'' },
+      { t:labels[0].padEnd(w)+(name||T('(no name)')) },
+      { t:labels[1].padEnd(w)+new Date().toLocaleString(window.LANG==='es'?'es':'en') },
+      { t:labels[2].padEnd(w)+now.filter(Boolean).length+' / '+now.length }
+    ];
+    g.cast.forEach(c=>{
+      rows.push({ t:'' }, { t:'' }, { t:c.name.toUpperCase(), b:true }, { t:'' });
+      scriptText(c.name).forEach(s=>rows.push({ t:s }));
+    });
+    return rows;
+  }
+  function download(){
+    let name=myName;
+    const typed=prompt(T('Your name, for the top of the page:'), name);
+    if(typed===null) return;
+    name=typed.trim();
+    myName=name;
+    const blob=new Blob([pdf(handIn(name))], { type:'application/pdf' });
+    const a=document.createElement('a');
+    const slug=(name||'student').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+      .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'student';
+    a.href=URL.createObjectURL(blob);
+    a.download='bug-squad-'+game().id+'-'+slug+'.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  }
+
+  /* ==================================================== the screen */
+  function board(){
+    const el=$('#dnScore'); if(!el) return;
+    if('left' in VM.project.vars){
+      const l=Math.floor(+VM.project.vars.left)||0, r=Math.floor(+VM.project.vars.right)||0, h=`${l}    ${r}`;
+      if(el.innerHTML!==h) el.innerHTML=h; return;
+    }
+    const has_='score' in VM.project.vars;
+    const n=parseFloat(VM.project.vars.score);
+    const html = has_ ? `${T('score').toUpperCase()} ${isFinite(n)?Math.floor(n):0}` : '';
+    if(el.innerHTML!==html) el.innerHTML=html;
+  }
+  function message(){
+    const el=$('#dnMsg'); if(!el) return;
+    const want = VM.running ? '' : `<small class="dn-start">▶ ${T('RUN')}</small>`;
+    if(el.dataset.html!==want){ el.dataset.html=want; el.innerHTML=want; }
+    el.classList.toggle('hidden', !want);
+  }
+  function buttons(){
+    const run=$('#dnRun');
+    if(run){ const live=VM.running, label=live ? '■ '+T('STOP') : '▶ '+T('RUN');
+      if(run.textContent!==label) run.textContent=label;
+      run.classList.toggle('live', live); }
+  }
+  const LANG_BTN = () => window.LANG==='es' ? '🌐 English' : '🌐 Español';
+  function words(){
+    const tip=(s,h)=>{ const e=$(s); if(e) e.title=T(h); };
+    const set=(s,h)=>{ const e=$(s); if(e) e.innerHTML=h; };
+    set('#dnOpen', '▦ '+T('BLOCKS'));
+    const snd=$('#dnSound'); if(snd) snd.textContent = SND.on ? '🔊' : '🔇';
+    tip('#dnSound', SND.on ? 'Sound on' : 'Sound off');
+    set('#dnLang', window.LANG==='es' ? 'EN' : 'ES');
+    tip('#dnLang', window.LANG==='es' ? 'English' : 'Español');
+    tip('#dnHelp','How to play'); tip('#dnReset','Start this game over');
+    tip('#dnPdf','Download my code');
+    const tb=$('#dnTeacher'); if(tb){ tb.textContent='🔑 '+T('Teacher'); tb.classList.toggle('hidden', !teach); }
+    const tk=$('#bsKey'); if(tk){ tk.classList.toggle('on', teach); tk.title=T(teach ? 'Leave teacher mode' : 'Teacher'); }
+    if(briefOpen()){ if(tourAt===-2) badge(); else if(tourAt<0) intro(); else tour(tourAt); }
+    message(); buttons(); fixedWas=null; levels();
+    if(window.CODER && CODER.open) CODER.render();
+  }
+  /* THE TOUR: one big picture and one line a card, clicked through */
+  const TOUR=[
+    ['🕹️','ARCADE','Ten games. Pick one.'],
+    ['▦','See the code','Open the blocks.']
+  ];
+  let tourAt=-1;
+  const langBtn = () => `<button class="bs-lang" id="dnLang2">${window.LANG==='es'?'EN':'ES'}</button>`;
+  function tour(i){
+    tourAt=i;
+    const el=$('#dnBrief .card'); if(!el) return;
+    const [big,head,line]=TOUR[i], last=i===TOUR.length-1;
+    $('#dnBrief').classList.remove('hidden');
+    el.innerHTML=`${langBtn()}
+      <div class="bs-big">${big}</div>
+      <h1>${T(head)}</h1>
+      <p class="bs-line">${T(line)}</p>
+      <div class="bs-dots">${TOUR.map((_,j)=>`<i class="${j===i?'on':''}"></i>`).join('')}</div>
+      <button class="btn good bs-go" id="dnGo">${last?T('Start')+' ▶':'▶'}</button>`;
+    $('#dnGo').onclick=()=> last ? intro() : tour(i+1);
+    $('#dnLang2').onclick=toggleLang;
+  }
+  /* EACH GAME OPENS ON ONE CARD: what it is, the one rule, the keys, Play */
+  function intro(){
+    tourAt=-1;
+    const el=$('#dnBrief .card'); if(!el) return;
+    const g=game();
+    $('#dnBrief').classList.remove('hidden');
+    el.innerHTML=`${langBtn()}
+      <div class="bs-big">${g.icon}</div>
+      <h1>${T(g.name)}</h1>
+      <p class="bs-line">${T(g.lesson)}</p>
+      <div class="bs-k">${g.keys.map(([k,w])=>`<span><kbd>${k}</kbd> ${T(w)}</span>`).join('')}</div>
+      <button class="btn good bs-go" id="dnGo">▶ ${T('Play')}</button>`;
+    $('#dnGo').onclick=()=>{ closeBrief(); go(); };
+    $('#dnLang2').onclick=toggleLang;
+  }
+  const briefOpen = () => { const b=$('#dnBrief'); return !!b && !b.classList.contains('hidden'); };
+  /* ======================================================== the badge
+     WHAT A STUDENT HANDS IN AT THE END: a picture with their name on it,
+     drawn on a canvas right here and saved as a PNG — the kind of file
+     Google Classroom takes straight from "Add or create → File". */
+  const allStars = () => GAMES.every(g=>stars[g.id]);
+  let badgeShown=false;
+  function drawBadge(name){
+    const cv=document.createElement('canvas'); cv.width=1200; cv.height=800;
+    const c=cv.getContext('2d');
+    const font=(w,px)=>`${w} ${px}px 'Space Mono', ui-monospace, Menlo, monospace`;
+    c.fillStyle='#15142b'; c.fillRect(0,0,1200,800);
+    /* a few stars, the same every time */
+    let r=7; const rnd=()=>{ r=(r*16807)%2147483647; return r/2147483647; };
+    for(let i=0;i<90;i++){ c.fillStyle=rnd()<0.3?'#8fd3ff':'#d8d8ff'; const z=2+rnd()*3; c.fillRect(rnd()*1200, rnd()*800, z, z); }
+    c.strokeStyle='#ffe14d'; c.lineWidth=10; c.strokeRect(30,30,1140,740);
+    c.strokeStyle='#4b4885'; c.lineWidth=3; c.strokeRect(52,52,1096,696);
+    c.textAlign='center'; c.textBaseline='middle';
+    c.font='120px serif'; c.fillText('🏅',600,150);
+    c.fillStyle='#ffe14d'; c.font=font('bold',64); c.fillText(T('BUG SQUAD').toUpperCase(),600,270);
+    c.fillStyle='#d9d7ff'; c.font=font('bold',30); c.fillText(T('MASTER DEBUGGER'),600,330);
+    c.fillStyle='#ffffff';
+    let px=72; c.font=font('bold',px);
+    const who=name||T('(no name)');
+    while(c.measureText(who).width>1000 && px>30){ px-=4; c.font=font('bold',px); }
+    c.fillText(who,600,430);
+    c.fillStyle='#5dff7a'; c.font=font('bold',32);
+    c.fillText(T('18 of 18 bugs fixed'),600,510);
+    c.font='64px serif';
+    GAMES.forEach((g,i)=>c.fillText(g.icon, 600+(i-2.5)*120, 600));
+    c.fillStyle='#8d8bb8'; c.font=font('normal',24);
+    c.fillText(new Date().toLocaleDateString(window.LANG==='es'?'es':'en',{ year:'numeric', month:'long', day:'numeric' }),600,700);
+    return cv;
+  }
+  function badge(){
+    let name=myName;
+    tourAt=-2;
+    const el=$('#dnBrief .card'); if(!el) return;
+    $('#dnBrief').classList.remove('hidden');
+    el.innerHTML=`<button class="bs-lang" id="bsBadgeX" aria-label="Close">✕</button>
+      <div class="bs-big">🏅</div>
+      <h1>${T('You did it!')}</h1>
+      <input class="bs-name" id="bsName" maxlength="40" placeholder="${T('Your name')}" value="${String(name).replace(/"/g,'&quot;')}">
+      <img class="bs-prev" id="bsPrev" alt="">
+      <button class="btn good bs-go" id="bsSave">⤓ ${T('Download badge')}</button>`;
+    const inp=$('#bsName'), prev=$('#bsPrev');
+    const paint=()=>{ prev.src=drawBadge(inp.value.trim()).toDataURL('image/png'); };
+    paint(); inp.oninput=paint;
+    /* fonts may still be arriving: draw once more when they have */
+    if(document.fonts && document.fonts.ready) document.fonts.ready.then(paint);
+    setTimeout(()=>inp.focus(), 50);
+    $('#bsBadgeX').onclick=closeBrief;
+    $('#bsSave').onclick=()=>{
+      const nm=inp.value.trim();
+      if(!nm){ inp.focus(); inp.classList.add('need'); return; }
+      myName=nm;
+      drawBadge(nm).toBlob(b=>{
+        const a=document.createElement('a');
+        const slug=nm.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'student';
+        a.href=URL.createObjectURL(b); a.download='bug-squad-badge-'+slug+'.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+      }, 'image/png');
+    };
+  }
+  function closeBrief(){ $('#dnBrief').classList.add('hidden'); SND.wake(); }
+  function setLang(l){
+    window.LANG = l==='es' ? 'es' : 'en';
+    document.documentElement.lang=window.LANG;
+    try{ localStorage.setItem(LANG_KEY, window.LANG); }catch(e){}
+    words();
+  }
+  const toggleLang = () => setLang(window.LANG==='es' ? 'en' : 'es');
+
+  /* ==================================================== the camera
+     Straight down and orthographic, framed on the whole arcade screen —
+     and while the editor is open, fitted into the gap between the shelf
+     and the script, above the bug list, so a fix can be run and watched
+     without closing anything. */
+  let cam=null;
+  function gap(){
+    const Wd=innerWidth, H=innerHeight;
+    const bugs=$('#bsBugs'), bh=bugs ? bugs.offsetHeight+18 : 0;
+    const coding=!!(window.CODER && CODER.open);
+    if(bugs) bugs.classList.toggle('side', !coding);
+    if(coding){
+      const p=$('#cPal'), s=$('#cScript'), bar=$('#cBar');
+      const l=p ? p.getBoundingClientRect().right+8 : 0;
+      const r=s ? s.getBoundingClientRect().left-8 : Wd;
+      const t=bar ? bar.getBoundingClientRect().bottom+8 : 0;
+      if(r-l > 180) return { l, t, r, b:H-bh, coding:true };
+    }
+    const top=$('#bsTop'), tb=top ? top.getBoundingClientRect().bottom+8 : 0;
+    const bw=bugs ? bugs.offsetWidth+24 : 0;
+    if(bugs) bugs.style.top=(tb+4)+'px';
+    return { l:bw, t:tb, r:Wd, b:H-10, coding:false };
+  }
+  function camera(){
+    const Wd=innerWidth, H=Math.max(1,innerHeight);
+    const R=gap(), pad=0.6;
+    const win={ x0:W.x0-pad, x1:W.x1+pad, y0:W.y0-pad, y1:W.y1+pad };
+    const rw=Math.max(1,R.r-R.l), rh=Math.max(1,R.b-R.t);
+    const u=Math.max((win.x1-win.x0)/rw, (win.y1-win.y0)/rh);
+    const xc=(win.x0+win.x1)/2, yc=(win.y0+win.y1)/2;
+    const cx=(R.l+R.r)/2, cy=(R.t+R.b)/2;
+    if(!cam) cam=new THREE.OrthographicCamera(-1,1,1,-1,0.1,400);
+    cam.left=xc-cx*u; cam.right=cam.left+Wd*u;
+    cam.top=yc+cy*u;  cam.bottom=cam.top-H*u;
+    cam.position.set(0,120,0); cam.up.set(0,0,-1); cam.lookAt(0,0,0);
+    cam.updateProjectionMatrix();
+    G.camera=cam;
+    /* the bug list sits under the screen, as wide as the gap allows */
+    const bugs=$('#bsBugs');
+    if(bugs && R.coding){ const w=Math.min(560, Math.max(240, rw-16));
+      bugs.style.width=w+'px'; bugs.style.left=((R.l+R.r)/2 - w/2)+'px'; bugs.style.top=''; }
+    else if(bugs){ bugs.style.width=''; bugs.style.left=''; }
+    const sc=$('#dnScore'), msg=$('#dnMsg');
+    const sx = x => (x-cam.left)/u, sy = y => (cam.top-y)/u;       // squares → pixels
+    if(sc){ sc.style.right=(Wd-sx(W.x1)+10)+'px'; sc.style.top=(sy(W.y1)+8)+'px'; }
+    if(msg){ msg.style.left=((R.l+R.r)/2)+'px'; msg.style.top=(sy(W.y1)+10)+'px';
+             msg.style.maxWidth=Math.max(160, rw-24)+'px'; }
+  }
+  function world(ev){
+    const c=$('#view').getBoundingClientRect();
+    const fx=(ev.clientX-c.left)/c.width, fy=(ev.clientY-c.top)/c.height;
+    return { x:cam.left+fx*(cam.right-cam.left), y:cam.top-fy*(cam.top-cam.bottom) };
+  }
+  /* CLICK A CHARACTER AND READ ITS CODE */
+  function pickAt(ev){
+    if(!cam || briefOpen()) return;
+    const p=world(ev);
+    const names=game().cast.map(c=>c.name);
+    const cands=VM.project.actors.filter(a=>a.visible!==false)
+      .sort((a,b)=>names.indexOf(a.name)-names.indexOf(b.name));
+    let a=cands.find(o=>COSTUMES.hit(o,p.x,p.y)) || cands.find(o=>COSTUMES.hit(o,p.x,p.y,true));
+    if(!a) return;
+    if(a.isClone) a=actor(a.name);
+    if(a && window.CODER){ CODER.setActor(a); CODER.show(); }
+  }
+
+  /* ==================================================== playing */
+  function go(){
+    if(VM.running) return;
+    const f=document.activeElement;
+    if(f && f.tagName==='BUTTON') f.blur();
+    SND.wake();
+    VM.greenFlag();
+  }
+  const typing = el => !!(el && (el.tagName==='INPUT' || el.tagName==='TEXTAREA' ||
+                                 el.tagName==='SELECT' || el.isContentEditable));
+  function keys(e){
+    if(typing(e.target)) return;
+    if(briefOpen()){ if((e.code==='Space'||e.code==='Enter') && !e.repeat){ e.preventDefault(); const b=$('#dnGo'); if(b) b.click(); } return; }
+    /* ENTER is Run: SPACE belongs to the games (shooting, jumping) */
+    if(e.code==='Enter' && !e.repeat && !VM.running){ e.preventDefault(); go(); }
+  }
+
+  /* ==================================================== in */
+  let on=false;
+  function start(){
+    G.room='bugs';
+    VM.useScratch();
+    const g0=0;
+    let l='en'; try{ l=localStorage.getItem(LANG_KEY)||'en'; }catch(e){}
+    window.LANG = l==='es' ? 'es' : 'en';
+    load(g0);
+    on=true;
+    $('#bsKey').onclick=teacherKey;
+    camera();
+    $('#view').addEventListener('pointerdown', pickAt);
+    addEventListener('keydown', keys);
+    addEventListener('pointerdown', ()=>SND.wake(), { once:true });
+    $('#dnOpen').onclick=()=>{ if(window.CODER) CODER.toggle(); };
+    $('#dnRun').onclick=()=>{ if(VM.running) VM.stopAll(); else go(); };
+    $('#dnHelp').onclick=()=>tour(0);
+    $('#dnSound').onclick=()=>{ SND.on=!SND.on; if(SND.on) SND.wake(); words(); };
+    $('#dnLang').onclick=toggleLang;
+    $('#dnReset').onclick=original;
+    $('#dnPdf').onclick=download;
+    document.querySelectorAll('#bsTop .dn-btn').forEach(b=>b.addEventListener('click', ()=>b.blur()));
+    setLang(window.LANG);
+    tour(0);
+  }
+  function step(dt){
+    if(!on) return;
+    VM.step(dt);
+    VM.project.actors.forEach(a=>{ if(a.y!==1){ a.y=1; VM.sync(a); } });
+    beat+=dt;
+    if(beat>0.25){ beat=0; checkBugs(); }
+  }
+  function draw(dt){
+    if(!on) return;
+    camera();
+    if(window.CODER) CODER.tick(dt);
+    const coding=!!(window.CODER && CODER.open);
+    const hud=$('#dino'); if(hud) hud.classList.toggle('coding', coding);
+    board(); buttons(); message();
+  }
+
+  return { start, step, draw, load, status, GAMES, SHELF, handed,
+           pick(i){ gi=i; },                   // for the tests: choose a game without a screen
+           scriptText, handIn, pdf,
+           get gi(){ return gi; }, get teacher(){ return teacher; }, get active(){ return on; } };
+})();
