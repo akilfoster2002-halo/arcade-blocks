@@ -767,7 +767,7 @@ window.BUGS = (function(){
         title="${T(g.name)}">${g.icon}</button>`).join('');
     if(el.dataset.html!==html){
       el.dataset.html=html; el.innerHTML=html;
-      el.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{ b.blur(); load(+b.dataset.g); intro(); });
+      el.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{ b.blur(); load(+b.dataset.g); intro(); history.replaceState(null,'','?g='+game().id); });
     }
   }
 
@@ -1123,7 +1123,9 @@ window.BUGS = (function(){
   function start(){
     G.room='bugs';
     VM.useScratch();
-    const g0=0;
+    /* the menu (index.html) opens a game with ?g=<id> */
+    const want=(typeof location!=='undefined' && new URLSearchParams(location.search).get('g'))||'';
+    const g0=Math.max(0, GAMES.findIndex(g=>g.id===want));
     let l='en'; try{ l=localStorage.getItem(LANG_KEY)||'en'; }catch(e){}
     window.LANG = l==='es' ? 'es' : 'en';
     load(g0);
@@ -1135,14 +1137,14 @@ window.BUGS = (function(){
     addEventListener('pointerdown', ()=>SND.wake(), { once:true });
     $('#dnOpen').onclick=()=>{ if(window.CODER) CODER.toggle(); };
     $('#dnRun').onclick=()=>{ if(VM.running) VM.stopAll(); else go(); };
-    $('#dnHelp').onclick=()=>tour(0);
+    $('#dnHelp').onclick=intro;
     $('#dnSound').onclick=()=>{ SND.on=!SND.on; if(SND.on) SND.wake(); words(); };
     $('#dnLang').onclick=toggleLang;
     $('#dnReset').onclick=original;
     $('#dnPdf').onclick=download;
     document.querySelectorAll('#bsTop .dn-btn').forEach(b=>b.addEventListener('click', ()=>b.blur()));
     setLang(window.LANG);
-    tour(0);
+    intro();
   }
   function step(dt){
     if(!on) return;

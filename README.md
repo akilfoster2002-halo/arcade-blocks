@@ -1,7 +1,7 @@
 # Arcade — ten classic games, a few blocks each
 
 A bare-bones arcade cabinet built on the same block framework as Bug Squad / Dino Run (MESACS 0.2a).
-Pick a game from the row of icons, press **▶ RUN** (or Enter), and open **▦ BLOCKS** (or click any
+Pick a game on the menu page (`index.html`; each card shows the game's own sprites), press **▶ RUN** (or Enter), and open **▦ BLOCKS** (or click any
 character) to read the code that makes it work. Every rule is in blocks; change a number and run again.
 **↺** puts a game's code back. EN / ES.
 
