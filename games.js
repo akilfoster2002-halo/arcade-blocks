@@ -601,12 +601,12 @@ window.BUGS = window.ARCADE = (function(){
                          IF(gt(pos('y'),Y), setTo('y',-Y)), IF(lt(pos('y'),-Y), setTo('y',Y))];
       return {
       Ship:[ flag(vset('score',0), vset('lives',3), goto(0,0), face(0), vset('vx',0), vset('vy',0), become('ast/ship'), forever(
-        IF(key('left'),  turn(-6)),
-        IF(key('right'), turn(6)),
+        IF(key('left'),  turn(-4)),
+        IF(key('right'), turn(4)),
         IFELSE(key('up'),
-          [vchg('vx', mul(sin(dirR()),0.012)), vchg('vy', mul(cos(dirR()),0.012)), become('ast/thrust')],
+          [vchg('vx', mul(sin(dirR()),0.004)), vchg('vy', mul(cos(dirR()),0.004)), become('ast/thrust')],
           [become('ast/ship')]),
-        vset('vx', mul(v('vx'),0.99)), vset('vy', mul(v('vy'),0.99)),      // space dust slows you, slowly
+        vset('vx', mul(v('vx'),0.985)), vset('vy', mul(v('vy'),0.985)),    // space dust slows you, slowly
         chg('x',v('vx')), chg('y',v('vy')),
         ...wrap(16.5,12.5),
         vset('heading', dirR()),
