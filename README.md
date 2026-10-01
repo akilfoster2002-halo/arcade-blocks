@@ -18,4 +18,12 @@ character) to read the code that makes it work. Every rule is in blocks; change 
 | 9 | 🐝 Galaga | fighter, three bees that swoop down at you |
 | 10 | 🐛 Centipede | 8 segments, each turning and dropping at walls and mushrooms; shoot segments and mushrooms |
 
+## Play it online
+
+- **https://arcade-blocks.onrender.com** (its own Render site, redeploys on every push to
+  github.com/akilfoster2002-halo/arcade-blocks)
+- **https://mesacs-0-2.onrender.com/6/**
+
+Worked on in MESACS_0.2 (`6/`); update the arcade repo with `git subtree push --prefix=6 arcade main`.
+
 Run locally: `python3 -m http.server 8798` in this folder, or open `index.html`.
