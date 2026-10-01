@@ -18,7 +18,7 @@ Each game uses the original machine's screen shape and pixel sprites (1 art pixe
 | 5 | 🟦 Tetris | NES rules: 7 pieces, rotation, hold-to-slide, soft drop, line clears, 40/100/300/1200 × level, speed by level, top-out |
 | 6 | 🐸 Frogger | 5 lanes of traffic, 5 river lanes of logs and turtles you ride (water kills), 5 bays (a filled bay kills), edges kill |
 | 7 | 🟡 Pac-Man | the real maze, 240 dots + 4 energizers, Pac-Man keeps moving and buffers turns, 4 ghosts (Blinky chases hardest), blue ghosts, tunnel |
-| 8 | 🪨 Asteroids | rotate, thrust and drift (no brakes), wrap-around, rocks split big → medium → small, waves grow |
+| 8 | 🪨 Asteroids | rotate, thrust and drift (no brakes), wrap-around, rocks split big → medium → small; waves start at 3 rocks and add one each wave, up to 8; the ship comes back only when the middle is clear |
 | 9 | 🐝 Galaga | 40-ship formation that sways; dives that fire at you; boss Galagas take two hits; stages |
 | 10 | 🐛 Centipede | 12-segment centipede turns at mushrooms and walls; a shot segment becomes a mushroom (so it splits); mushrooms take 4 hits; spider |
 

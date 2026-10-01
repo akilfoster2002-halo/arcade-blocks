@@ -592,8 +592,8 @@ window.BUGS = window.ARCADE = (function(){
       { name:'Shot', shape:'ast/shot',  x:0,  y:0, visible:false },
       { name:'Rock', shape:'ast/rock3', x:0,  y:12, visible:false, local:{ level:0 } }
     ],
-    vars:{ score:0, lives:3, vx:0, vy:0, heading:0, wave:4 },
-    lists(){ return { SPEED:[2.2,1.5,1], POINTS:[100,50,20] }; },
+    vars:{ score:0, lives:3, vx:0, vy:0, heading:0, wave:3 },
+    lists(){ return { SPEED:[1.6,1.1,0.7], POINTS:[100,50,20] }; },
     keys:[['← →','turn'],['↑','thrust'],['SPACE','fire']],
     thumb(){ return [['ast/rock3',-10,5],['ast/rock3',9,-6],['ast/rock2',11,7],['ast/rock2',-12,-7],['ast/rock1',-4,-8],['ast/rock1',5,9],['ast/shot',0,3]]; },
     code(){
@@ -611,14 +611,17 @@ window.BUGS = window.ARCADE = (function(){
         ...wrap(16.5,12.5),
         vset('heading', dirR()),
         IF(touch('Rock'), become('ast/boom'), wait(1.5), vchg('lives',-1), IF(eq(v('lives'),0), stopAll()),
-          goto(0,0), face(0), vset('vx',0), vset('vy',0), become('ast/ship'), wait(1)) )) ],
+          goto(0,0), face(0), vset('vx',0), vset('vy',0), become('ast/ship'), wait(1),
+          waitUntil(not(touch('Rock')))) )) ],          // come back only when the middle is clear
       Shot:[
         flag(hide()),
         onKey('space', goto(of('x','Ship'), of('y','Ship')), face(v('heading')), clone()),
         onClone(show(), REP(36, move(6), ...wrap(16,12), IF(touch('Rock'), wait(0.02), del())), del()) ],
       Rock:[
-        flag(hide(), vset('level',0), vset('wave',4), sendWait('wave'), forever(
-          waitUntil(eq(count('Rock'),1)), wait(2), vchg('wave',2), sendWait('wave'))),
+        flag(hide(), vset('level',0), vset('wave',3), sendWait('wave'), forever(
+          waitUntil(eq(count('Rock'),1)), wait(3),
+          IF(lt(v('wave'),8), vchg('wave',1)),           // one more rock each wave, up to 8
+          sendWait('wave'))),
         recv('wave', IF(eq(v('level'),0), REP(v('wave'),
           goto(rnd(-16,16),12), face(rnd(0,359)), become('ast/rock3'), vset('level',3), clone(), vset('level',0)))),
         onClone(show(), forever(
